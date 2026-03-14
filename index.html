@@ -1504,8 +1504,8 @@ function calcHeures() {
 }
 
 window.saveHeures = function saveHeures() {
-  if(!window.currentUser) { showNotif('Non connecté ❌','error'); return; }
-  if(!window._fbReady) { showNotif('Firebase non prêt ❌','error'); return; }
+  if(!window.currentUser) { showNotif('Non connecte','error'); return; }
+  if(!window._db || !window._fs) { setTimeout(function(){ window.saveHeures(); }, 500); showNotif('Connexion Firebase...'); return; }
 
   var arrivee = document.getElementById('heure-arrivee').value;
   var debutPause = document.getElementById('heure-debut-pause').value;
