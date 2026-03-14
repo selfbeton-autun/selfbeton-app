@@ -1044,9 +1044,10 @@ function switchTechTab(tab,el){
   if(tab==='rapport')updateRapportSummary();
   if(tab==='dashboard')updateTechDashboard();
   if(tab==='heures'){
-    const hd = document.getElementById('heures-date');
-    if(hd) hd.textContent = formatDate();
-    calcHeures();
+    heuresDateOffset = 0;
+    updateHeuresDateDisplay();
+    loadHeuresForDate();
+    setTimeout(checkVendredi, 200);
   }
 }
 
@@ -1671,8 +1672,9 @@ document.getElementById('login-user')?.addEventListener('keydown',e=>{if(e.key==
 // ═══════════ HEURES / POINTAGE ═══════════
 var typeJournee = 'travail';
 var currentSemaine = 0;
-var heuresDateOffset = 0; // 0 = aujourd'hui, -1 = hier, etc.
-var heuresExistingId = null; // ID du document Firebase si déjà enregistré
+var heuresDateOffset = 0;
+var heuresExistingId = null;
+window.heuresDateOffset = 0;
 
 function getHeuresDate() {
   var d = new Date();
@@ -1698,7 +1700,7 @@ function updateHeuresDateDisplay() {
   var nextBtn = document.getElementById('heures-next-btn');
   if(el) {
     if(heuresDateOffset === 0) {
-      el.textContent = 'Aujourd'hui';
+      el.textContent = "Aujourd'hui";
     } else if(heuresDateOffset === -1) {
       el.textContent = 'Hier';
     } else {
@@ -1914,13 +1916,15 @@ window.changeSemaine = function changeSemaine(delta) {
 }
 
 function loadPaieData() {
-  if(!window.doLoadPointages || !window.doLoadSignatures) { setTimeout(loadPaieData, 300); return; }
-  // Load signatures for current week
-  var semaine = getWeekNumber(new Date());
-  window.doLoadSignatures(function(sigs) {
-    var weekSig = sigs.find(function(s) { return s.semaine === semaine && s.technicien === 'francois'; });
-    window._semaineSignature = weekSig || null;
-  });
+  if(!window.doLoadPointages) { setTimeout(loadPaieData, 300); return; }
+  // Load signatures for current week if available
+  if(window.doLoadSignatures) {
+    var semaine = getWeekNumber(new Date());
+    window.doLoadSignatures(function(sigs) {
+      var weekSig = sigs.find(function(s) { return s.semaine === semaine && s.technicien === 'francois'; });
+      window._semaineSignature = weekSig || null;
+    });
+  }
   var dates = getWeekDates(currentSemaine);
   var monday = dates.monday;
 
