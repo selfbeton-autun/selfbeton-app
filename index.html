@@ -1666,7 +1666,10 @@ function isWeekday() {
 function checkHeuresRappel() {
   if(!window.currentUser) return;
   if(!isWeekday()) return;
-  if(!window._fbReady) return;
+  if(!window._fbReady) {
+    document.addEventListener('firebase-ready', function() { checkHeuresRappel(); }, { once: true });
+    return;
+  }
 
   var today = new Date().toLocaleDateString('fr-FR');
   var fsObj = window._fs;
