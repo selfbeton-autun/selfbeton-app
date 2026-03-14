@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -891,7 +890,7 @@ window.LOGO_B64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/4QBmRXhpZg
 <div id="notif" style="display:none" class="notif"></div>
 
 <script>
-const TECHNICIENS = {
+const TECHNICIENS = window.TECHNICIENS = {
   'francois': { pin:'240579', nom:'François', color:'#e8640a' },
   'mohian':   { pin:'230509', nom:'Mohian',   color:'#3ecf8e' },
   'maden':    { pin:'040312', nom:'Maden',    color:'#8899dd' },
@@ -927,14 +926,14 @@ function doLogin(){
   if(!user){ showNotif('Sélectionner un utilisateur ❌','error'); return; }
   if(!pin){ showNotif('Entrer votre code ❌','error'); return; }
   if(TECHNICIENS[user] && TECHNICIENS[user].pin===pin){
-    currentUser=user; currentRole='technicien';
+    currentUser=user; currentRole='technicien'; window.currentUser=user; window.currentRole='technicien';
     document.getElementById('tech-name').textContent=TECHNICIENS[user].nom;
     document.getElementById('tech-avatar').textContent=TECHNICIENS[user].nom.charAt(0);
     document.getElementById('tech-avatar').style.background=`linear-gradient(135deg,#2d3561,${TECHNICIENS[user].color})`;
     showScreen('tech'); updateTechDashboard();
-    waitForFirebase(()=>{ listenConsignesAndGoals(); });
+    waitForFirebase(()=>{ listenConsignesAndGoals(); setTimeout(checkHeuresRappel, 2000); });
   } else if(user==='gerant' && pin==='0000'){
-    currentRole='gerant'; showScreen('manager');
+    currentRole='gerant'; window.currentRole='gerant'; showScreen('manager');
     waitForFirebase(()=>{ setupManagerListener(); loadGoalsManager(); loadConsignesManager(); });
     startOrdersPolling();
   } else { showNotif('Code incorrect ❌','error'); }
@@ -1422,7 +1421,39 @@ document.getElementById('login-user')?.addEventListener('keydown',e=>{if(e.key==
 var typeJournee = 'travail';
 var currentSemaine = 0;
 
-function setTypeJournee(type, el) {
+// Make calcHeures available immediately for onchange handlers
+window.calcHeures = function() {
+  var arrivee = document.getElementById('heure-arrivee') ? document.getElementById('heure-arrivee').value : '';
+  var debutPause = document.getElementById('heure-debut-pause') ? document.getElementById('heure-debut-pause').value : '';
+  var finPause = document.getElementById('heure-fin-pause') ? document.getElementById('heure-fin-pause').value : '';
+  var depart = document.getElementById('heure-depart') ? document.getElementById('heure-depart').value : '';
+
+  var aMin = toMin(arrivee), dMin = toMin(depart);
+  var dpMin = toMin(debutPause), fpMin = toMin(finPause);
+  var pauseMin = 0;
+  if(dpMin !== null && fpMin !== null && fpMin > dpMin) pauseMin = fpMin - dpMin;
+
+  var travailMin = null, effectifMin = null, supMin = null;
+  if(aMin !== null && dMin !== null && dMin > aMin) {
+    travailMin = dMin - aMin;
+    effectifMin = travailMin - pauseMin;
+    supMin = effectifMin - 7*60;
+  }
+
+  var ct = document.getElementById('calc-travail');
+  var cp = document.getElementById('calc-pause');
+  var ce = document.getElementById('calc-effectif');
+  var cs = document.getElementById('calc-sup');
+  var badge = document.getElementById('heures-total-badge');
+
+  if(ct) ct.textContent = toHHMM(travailMin);
+  if(cp) cp.textContent = toHHMM(pauseMin > 0 ? pauseMin : null);
+  if(ce) ce.textContent = toHHMM(effectifMin);
+  if(cs) cs.textContent = supMin !== null ? (supMin >= 0 ? '+'+toHHMM(supMin) : toHHMM(supMin)) : '---';
+  if(badge && effectifMin !== null) badge.textContent = toHHMM(effectifMin);
+};
+
+window.setTypeJournee = function setTypeJournee(type, el) {
   typeJournee = type;
   document.querySelectorAll('.type-btn').forEach(function(b) {
     b.style.borderColor = 'rgba(255,255,255,.1)';
@@ -1472,7 +1503,7 @@ function calcHeures() {
   if(badge && effectifMin !== null) badge.textContent = toHHMM(effectifMin);
 }
 
-function saveHeures() {
+window.saveHeures = function saveHeures() {
   if(!window.currentUser) { showNotif('Non connecté ❌','error'); return; }
   if(!window._fbReady) { showNotif('Firebase non prêt ❌','error'); return; }
 
@@ -1531,7 +1562,7 @@ function getWeekDates(offset) {
   return { monday: monday, sunday: sunday };
 }
 
-function changeSemaine(delta) {
+window.changeSemaine = function changeSemaine(delta) {
   currentSemaine += delta;
   loadPaieData();
 }
@@ -1626,6 +1657,52 @@ document.addEventListener('DOMContentLoaded', function() {
     if(el) el.addEventListener('change', calcHeures);
   });
 });
+
+function isWeekday() {
+  var day = new Date().getDay(); // 0=dim, 6=sam
+  return day >= 1 && day <= 5;
+}
+
+function checkHeuresRappel() {
+  if(!window.currentUser) return;
+  if(!isWeekday()) return;
+  if(!window._fbReady) return;
+
+  var today = new Date().toLocaleDateString('fr-FR');
+  var fsObj = window._fs;
+  var dbObj = window._db;
+
+  var q = fsObj.query(
+    fsObj.collection(dbObj, 'pointages'),
+    fsObj.orderBy('timestamp', 'desc')
+  );
+
+  fsObj.onSnapshot(q, function(snap) {
+    var pointages = snap.docs.map(function(d) { return d.data(); });
+    var todayEntry = pointages.find(function(p) {
+      return p.technicien === window.currentUser && p.date === today;
+    });
+
+    var banner = document.getElementById('heures-rappel-banner');
+    if(!todayEntry && !banner) {
+      // Insert reminder banner at top of tech dashboard
+      var dashboard = document.getElementById('tech-dashboard');
+      if(!dashboard) return;
+      var div = document.createElement('div');
+      div.id = 'heures-rappel-banner';
+      div.style.cssText = 'background:rgba(232,93,74,.15);border:1.5px solid var(--red);border-radius:12px;padding:1rem 1.25rem;margin-bottom:1rem;display:flex;align-items:center;gap:.75rem;cursor:pointer';
+      div.innerHTML = '<span style="font-size:1.5rem">⏰</span><div style="flex:1"><div style="font-weight:600;font-size:.9rem;color:var(--red)">Heures non enregistrées</div><div style="font-size:.78rem;color:var(--text-dim)">N'oublie pas de pointer ta journée !</div></div><span style="color:var(--red);font-size:1.2rem">→</span>';
+      div.onclick = function() {
+        // Navigate to heures tab
+        var heuresNav = document.querySelector('#screen-tech .nav-item:nth-child(4)');
+        if(heuresNav) heuresNav.click();
+      };
+      dashboard.insertBefore(div, dashboard.firstChild);
+    } else if(todayEntry && banner) {
+      banner.remove();
+    }
+  });
+}
 </script>
 </body>
 </html>
