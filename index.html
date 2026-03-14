@@ -25,6 +25,24 @@ const db = getFirestore(app);
 window._db = db;
 window._fs = { collection, addDoc, onSnapshot, query, orderBy, where, doc, setDoc, getDoc, serverTimestamp };
 window._fbReady = true;
+
+// ═══ SAUVEGARDE HEURES (dans module Firebase pour accès direct) ═══
+window.doSaveHeures = async function(data) {
+  try {
+    await addDoc(collection(db, 'pointages'), data);
+    window.showNotif('Heures enregistrees !');
+  } catch(e) {
+    window.showNotif('Erreur: ' + e.message, 'error');
+  }
+};
+
+window.doLoadPointages = function(callback) {
+  const q = query(collection(db, 'pointages'), orderBy('timestamp', 'desc'));
+  return onSnapshot(q, snap => {
+    callback(snap.docs.map(d => ({id: d.id, ...d.data()})));
+  });
+};
+
 document.dispatchEvent(new Event('firebase-ready'));
 </script>
 
@@ -1568,19 +1586,16 @@ window.changeSemaine = function changeSemaine(delta) {
 }
 
 function loadPaieData() {
-  if(!window._db || !window._fs) { setTimeout(loadPaieData, 500); return; }
-  var fsObj = window._fs;
-  var dbObj = window._db;
+  if(!window.doLoadPointages) { setTimeout(loadPaieData, 300); return; }
   var dates = getWeekDates(currentSemaine);
   var monday = dates.monday;
-  var sunday = dates.sunday;
 
   var label = document.getElementById('paie-semaine-label');
   var badge = document.getElementById('paie-semaine-badge');
   var periode = document.getElementById('paie-periode');
-  if(label) label.textContent = monday.toLocaleDateString('fr-FR') + ' → ' + sunday.toLocaleDateString('fr-FR');
+  if(label) label.textContent = monday.toLocaleDateString('fr-FR') + ' -> ' + dates.sunday.toLocaleDateString('fr-FR');
   if(badge) badge.textContent = currentSemaine === 0 ? 'Semaine en cours' : 'S'+getWeekNumber(monday);
-  if(periode) periode.textContent = 'Semaine ' + getWeekNumber(monday) + ' — ' + monday.getFullYear();
+  if(periode) periode.textContent = 'Semaine ' + getWeekNumber(monday) + ' - ' + monday.getFullYear();
 
   var weekDates = [];
   for(var i=0; i<7; i++) {
@@ -1589,9 +1604,7 @@ function loadPaieData() {
     weekDates.push(d.toLocaleDateString('fr-FR'));
   }
 
-  var q = fsObj.query(fsObj.collection(dbObj, 'pointages'), fsObj.orderBy('timestamp', 'desc'));
-  fsObj.onSnapshot(q, function(snap) {
-    var allPointages = snap.docs.map(function(d) { return Object.assign({id: d.id}, d.data()); });
+  window.doLoadPointages(function(allPointages) {
     var weekPointages = allPointages.filter(function(p) { return weekDates.indexOf(p.date) >= 0; });
     renderPaieData(weekPointages, weekDates);
   });
