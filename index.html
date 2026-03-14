@@ -829,7 +829,7 @@ function submitRapport(){
 
 // ═══════════ COMMANDES API ═══════════
 const SHOP_ID = 339;
-const API_URL = `https://beton2go.primarkets.fr/api/v1/om/orders?filter%5Border%5D=orderDate+DESC&page=&shopId=${SHOP_ID}&size=50`;
+const API_URL = '/.netlify/functions/orders';
 let bearerToken = 'eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiI1NTgiLCJkYXRhIjp7InVzZXJuYW1lIjoiZGFtaWVuLmd1ZXVnbm9uQGdtYWlsLmNvbSIsImVtYWlsIjoiZGFtaWVuLmd1ZXVnbm9uQGdtYWlsLmNvbSIsImZpcnN0TmFtZSI6IkRhbWllbiIsImxhc3ROYW1lIjoiR1VFVUdOT04iLCJyb2xlcyI6W3siaWQiOjEsInNob3BJZHMiOlszMzldLCJuYW1lIjoiUk9MRV9BRE1JTiIsImRlc2NyaXB0aW9uIjoiUm9sbGUgZWluZXMgQWRtaW5udXR6ZXJzIn1dfSwiYXV0aCI6IlJPTEVfQURNSU4iLCJ0eXBlIjoiVVNFUiIsImV4cCI6MTc3MzUzMDM4OH0.p5AjWXJbGvvmgZAn3POhaQPW3c8MnLUzmaj8U7ZUBbSKdQCkqoPn9gM_qD1cbchsFF290MGab6Oyw4rROHRYig';
 let ordersInterval = null;
 let lastOrderId = null;
@@ -855,9 +855,8 @@ async function fetchOrders(){
   try {
     const res = await fetch(API_URL, {
       headers: {
-        'Authorization': 'Bearer ' + bearerToken,
-        'Accept': 'application/json',
-        'Current-Shop': String(SHOP_ID)
+        'x-token': bearerToken,
+        'Accept': 'application/json'
       }
     });
     if(!res.ok){ handleTokenError(res.status); return; }
