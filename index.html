@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -177,24 +178,23 @@ window.LOGO_B64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/4QBmRXhpZg
 <div id="screen-login" class="screen active">
   <div class="login-card">
     <div style="text-align:center;margin-bottom:1rem"><img id="logo-login" src="" alt="SelfBéton Autun" style="max-width:180px;width:100%"></div>
-    <div class="brand-sub">Gestion & Suivi — Autain</div>
-    <div class="role-tabs">
-      <div class="role-tab active" onclick="setRole('technicien',this)">👷 Technicien</div>
-      <div class="role-tab" onclick="setRole('gerant',this)">📊 Gérant</div>
-    </div>
+    <div class="brand-sub" style="text-align:center;font-size:1rem;font-weight:700;letter-spacing:2px;margin-bottom:2.5rem">Gestion & Suivi</div>
     <div class="form-group">
-      <label class="form-label">Prénom</label>
-      <input type="text" class="form-input" id="login-user" placeholder="ex: francois" autocomplete="username">
+      <label class="form-label">Qui êtes-vous ?</label>
+      <select class="select-input" id="login-user" style="font-size:1rem;padding:.85rem 1rem" onchange="onUserChange(this)">
+        <option value="">— Sélectionner —</option>
+        <option value="francois">👷 François</option>
+        <option value="mohian">👷 Mohian</option>
+        <option value="maden">👷 Maden</option>
+        <option value="damien">👷 Damien</option>
+        <option value="gerant">📊 Gérant</option>
+      </select>
     </div>
     <div class="form-group">
       <label class="form-label">Code</label>
       <input type="password" class="form-input" id="login-pin" placeholder="••••••" maxlength="6" autocomplete="current-password">
     </div>
     <button class="btn-primary" onclick="doLogin()">CONNEXION →</button>
-    <div style="margin-top:1.25rem;padding:.75rem;background:var(--bg3);border-radius:8px;font-size:.75rem;color:var(--text-dim)">
-      <strong style="color:var(--text)">Techniciens :</strong> francois · mohian · maden · damien<br>
-      <strong style="color:var(--text)">Gérant :</strong> gerant / 0000
-    </div>
   </div>
 </div>
 
@@ -525,25 +525,31 @@ function fs(){ return window._fs; }
 function waitForFirebase(cb){ if(window._fbReady){cb();}else{document.addEventListener('firebase-ready',cb,{once:true});} }
 
 // AUTH
-let selectedRole = 'technicien';
-function setRole(role,el){ selectedRole=role; document.querySelectorAll('.role-tab').forEach(t=>t.classList.remove('active')); el.classList.add('active'); }
+
+
+
+function onUserChange(sel){
+  // auto-focus PIN after selecting user
+  if(sel.value) document.getElementById('login-pin').focus();
+}
 
 function doLogin(){
-  const user = document.getElementById('login-user').value.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const user = document.getElementById('login-user').value.trim();
   const pin = document.getElementById('login-pin').value.trim();
-  if(!user||!pin){ showNotif('Renseigner identifiant et code ❌','error'); return; }
-  if(selectedRole==='technicien' && TECHNICIENS[user] && TECHNICIENS[user].pin===pin){
+  if(!user){ showNotif('Sélectionner un utilisateur ❌','error'); return; }
+  if(!pin){ showNotif('Entrer votre code ❌','error'); return; }
+  if(TECHNICIENS[user] && TECHNICIENS[user].pin===pin){
     currentUser=user; currentRole='technicien';
     document.getElementById('tech-name').textContent=TECHNICIENS[user].nom;
     document.getElementById('tech-avatar').textContent=TECHNICIENS[user].nom.charAt(0);
     document.getElementById('tech-avatar').style.background=`linear-gradient(135deg,#2d3561,${TECHNICIENS[user].color})`;
     showScreen('tech'); updateTechDashboard();
     waitForFirebase(()=>{ listenConsignesAndGoals(); });
-  } else if(selectedRole==='gerant' && user==='gerant' && pin==='0000'){
+  } else if(user==='gerant' && pin==='0000'){
     currentRole='gerant'; showScreen('manager');
     waitForFirebase(()=>{ setupManagerListener(); loadGoalsManager(); loadConsignesManager(); });
     startOrdersPolling();
-  } else { showNotif('Identifiants incorrects ❌','error'); }
+  } else { showNotif('Code incorrect ❌','error'); }
 }
 
 function logout(){ unsubscribers.forEach(u=>u()); unsubscribers=[]; if(ordersInterval){clearInterval(ordersInterval);ordersInterval=null;} currentUser=null; currentRole=null; document.getElementById('login-user').value=''; document.getElementById('login-pin').value=''; showScreen('login'); }
