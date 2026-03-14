@@ -2046,7 +2046,7 @@ function checkVendredi() {
   if(!block) return;
   var day = new Date().getDay();
   // Show on Friday (5) - or always show for testing, change to: day === 5
-  if(day === 5) {
+  if(day === 5 || day === 6) {
     // Check if already signed this week
     var semaine = getWeekNumber(new Date());
     var annee = new Date().getFullYear();
