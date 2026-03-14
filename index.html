@@ -1616,7 +1616,7 @@ function renderPaieData(pointages, weekDates) {
   var TECHNICIENS = window.TECHNICIENS;
   var html = '';
 
-  Object.entries(TECHNICIENS).forEach(function(entry) {
+  Object.entries(TECHNICIENS).filter(function(entry){ return entry[0] === 'francois'; }).forEach(function(entry) {
     var key = entry[0], info = entry[1];
     var techPointages = pointages.filter(function(p) { return p.technicien === key; });
     var totalMin = 0, joursTravailes = 0, heuresSupMin = 0;
