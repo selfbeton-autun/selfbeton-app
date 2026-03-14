@@ -1621,7 +1621,7 @@ function renderPaieData(pointages, weekDates) {
     var techPointages = pointages.filter(function(p) { return p.technicien === key; });
     var totalMin = 0, joursTravailes = 0, heuresSupMin = 0;
 
-    var jours = weekDates.slice(0,5).map(function(dateStr) {
+    var jours = weekDates.slice(0,7).map(function(dateStr) {
       var p = techPointages.find(function(x) { return x.date === dateStr; });
       if(!p) return { date: dateStr, label: '—', min: 0, type: 'absent' };
       if(p.typeJournee !== 'travail') return { date: dateStr, label: p.typeJournee, min: 0, type: p.typeJournee };
@@ -1641,7 +1641,7 @@ function renderPaieData(pointages, weekDates) {
     html += '<div style="flex:1"><div style="font-weight:700;font-size:1rem">'+info.nom+'</div>';
     html += '<div style="font-size:.75rem;color:var(--text-dim)">'+joursTravailes+' jour(s) · '+toHHMM(totalMin)+' / 35h</div></div>';
     html += '<span class="badge '+(diffMin>=0?'badge-green':'badge-red')+'">'+(diffMin>=0?'+':'')+toHHMM(diffMin)+'</span>';
-    html += '</div><div style="display:grid;grid-template-columns:repeat(5,1fr);gap:.35rem;margin-bottom:.75rem">';
+    html += '</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:.25rem;margin-bottom:.75rem">';
 
     jours.forEach(function(j) {
       var parts = j.date.split('/');
