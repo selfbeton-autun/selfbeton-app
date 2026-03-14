@@ -1568,7 +1568,7 @@ window.changeSemaine = function changeSemaine(delta) {
 }
 
 function loadPaieData() {
-  if(!window._fbReady) return;
+  if(!window._db || !window._fs) { setTimeout(loadPaieData, 500); return; }
   var fsObj = window._fs;
   var dbObj = window._db;
   var dates = getWeekDates(currentSemaine);
@@ -1666,8 +1666,8 @@ function isWeekday() {
 function checkHeuresRappel() {
   if(!window.currentUser) return;
   if(!isWeekday()) return;
-  if(!window._fbReady) {
-    document.addEventListener('firebase-ready', function() { checkHeuresRappel(); }, { once: true });
+  if(!window._db || !window._fs) {
+    setTimeout(checkHeuresRappel, 500);
     return;
   }
 
