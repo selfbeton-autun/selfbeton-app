@@ -10,7 +10,7 @@
 <!-- Firebase SDK -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, doc, setDoc, getDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, where, doc, setDoc, getDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyC0qLyhdWegqlF5SEwPhbJYfKaJa1npA8w",
@@ -24,7 +24,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 window._db = db;
-window._fs = { collection, addDoc, onSnapshot, query, orderBy, doc, setDoc, getDoc, serverTimestamp };
+window._fs = { collection, addDoc, onSnapshot, query, orderBy, where, doc, setDoc, getDoc, serverTimestamp };
 window._fbReady = true;
 document.dispatchEvent(new Event('firebase-ready'));
 </script>
@@ -214,6 +214,7 @@ window.LOGO_B64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/4QBmRXhpZg
     <div class="nav-item" onclick="switchTechTab('nettoyage',this)"><span class="nav-icon">🧹</span><span>Nettoyage</span></div>
     <div class="nav-item" onclick="switchTechTab('tremies',this)"><span class="nav-icon">🪣</span><span>Trémies</span></div>
     <div class="nav-item" onclick="switchTechTab('production',this)"><span class="nav-icon">🧱</span><span>Production</span></div>
+    <div class="nav-item" onclick="switchTechTab('heures',this)"><span class="nav-icon">⏰</span><span>Heures</span></div>
     <div class="nav-item" onclick="switchTechTab('rapport',this)"><span class="nav-icon">📋</span><span>Rapport</span></div>
   </div>
   <div class="main-scroll">
@@ -364,6 +365,369 @@ window.LOGO_B64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/4QBmRXhpZg
       <div><button class="submit-btn" style="margin:0 1.25rem 1rem;width:calc(100% - 2.5rem)" onclick="saveSection('production')">✅ VALIDER LA PRODUCTION</button></div>
     </div>
 
+    <div id="tech-heures" class="tab-content content">
+      <div class="date-banner">
+        <div><div class="date-main" id="heures-date">—</div><div style="font-size:.78rem;color:var(--concrete-light)">Pointage du jour</div></div>
+        <div class="date-badge" id="heures-total-badge">0h00</div>
+      </div>
+
+      <!-- TYPE DE JOURNEE -->
+      <div class="card">
+        <div class="card-title"><span class="dot" style="background:var(--yellow)"></span>Type de journée</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem" id="type-journee-btns">
+          <button class="type-btn active" onclick="setTypeJournee('travail',this)" style="padding:.75rem;border-radius:8px;border:2px solid var(--primary);background:rgba(46,125,50,.15);color:var(--primary);font-family:inherit;font-size:.85rem;font-weight:600;cursor:pointer">💼 Journée travail</button>
+          <button class="type-btn" onclick="setTypeJournee('conge',this)" style="padding:.75rem;border-radius:8px;border:2px solid rgba(255,255,255,.1);background:var(--bg3);color:var(--text-dim);font-family:inherit;font-size:.85rem;font-weight:600;cursor:pointer">🏖️ Congé</button>
+          <button class="type-btn" onclick="setTypeJournee('maladie',this)" style="padding:.75rem;border-radius:8px;border:2px solid rgba(255,255,255,.1);background:var(--bg3);color:var(--text-dim);font-family:inherit;font-size:.85rem;font-weight:600;cursor:pointer">🤒 Maladie</button>
+          <button class="type-btn" onclick="setTypeJournee('absent',this)" style="padding:.75rem;border-radius:8px;border:2px solid rgba(255,255,255,.1);background:var(--bg3);color:var(--text-dim);font-family:inherit;font-size:.85rem;font-weight:600;cursor:pointer">❌ Absence</button>
+        </div>
+      </div>
+
+      <!-- POINTAGE HEURES -->
+      <div class="card" id="pointage-card">
+        <div class="card-title"><span class="dot"></span>Pointage</div>
+
+        <div style="margin-bottom:1rem">
+          <label class="form-label">🟢 Heure d'arrivée</label>
+          <select class="select-input" id="heure-arrivee" style="font-size:1.05rem;font-weight:600" onchange="calcHeures()">
+        <option value="">--:--</option>
+        <option value="05:00">05:00</option>
+        <option value="05:15">05:15</option>
+        <option value="05:30">05:30</option>
+        <option value="05:45">05:45</option>
+        <option value="06:00">06:00</option>
+        <option value="06:15">06:15</option>
+        <option value="06:30">06:30</option>
+        <option value="06:45">06:45</option>
+        <option value="07:00">07:00</option>
+        <option value="07:15">07:15</option>
+        <option value="07:30">07:30</option>
+        <option value="07:45">07:45</option>
+        <option value="08:00">08:00</option>
+        <option value="08:15">08:15</option>
+        <option value="08:30">08:30</option>
+        <option value="08:45">08:45</option>
+        <option value="09:00">09:00</option>
+        <option value="09:15">09:15</option>
+        <option value="09:30">09:30</option>
+        <option value="09:45">09:45</option>
+        <option value="10:00">10:00</option>
+        <option value="10:15">10:15</option>
+        <option value="10:30">10:30</option>
+        <option value="10:45">10:45</option>
+        <option value="11:00">11:00</option>
+        <option value="11:15">11:15</option>
+        <option value="11:30">11:30</option>
+        <option value="11:45">11:45</option>
+        <option value="12:00">12:00</option>
+        <option value="12:15">12:15</option>
+        <option value="12:30">12:30</option>
+        <option value="12:45">12:45</option>
+        <option value="13:00">13:00</option>
+        <option value="13:15">13:15</option>
+        <option value="13:30">13:30</option>
+        <option value="13:45">13:45</option>
+        <option value="14:00">14:00</option>
+        <option value="14:15">14:15</option>
+        <option value="14:30">14:30</option>
+        <option value="14:45">14:45</option>
+        <option value="15:00">15:00</option>
+        <option value="15:15">15:15</option>
+        <option value="15:30">15:30</option>
+        <option value="15:45">15:45</option>
+        <option value="16:00">16:00</option>
+        <option value="16:15">16:15</option>
+        <option value="16:30">16:30</option>
+        <option value="16:45">16:45</option>
+        <option value="17:00">17:00</option>
+        <option value="17:15">17:15</option>
+        <option value="17:30">17:30</option>
+        <option value="17:45">17:45</option>
+        <option value="18:00">18:00</option>
+        <option value="18:15">18:15</option>
+        <option value="18:30">18:30</option>
+        <option value="18:45">18:45</option>
+        <option value="19:00">19:00</option>
+        <option value="19:15">19:15</option>
+        <option value="19:30">19:30</option>
+        <option value="19:45">19:45</option>
+        <option value="20:00">20:00</option>
+        <option value="20:15">20:15</option>
+        <option value="20:30">20:30</option>
+        <option value="20:45">20:45</option>
+        <option value="21:00">21:00</option>
+        <option value="21:15">21:15</option>
+        <option value="21:30">21:30</option>
+        <option value="21:45">21:45</option>
+        <option value="22:00">22:00</option>
+        <option value="22:15">22:15</option>
+        <option value="22:30">22:30</option>
+        <option value="22:45">22:45</option>
+        <option value="22:00">22:00</option>
+
+          </select>
+        </div>
+
+        <div style="margin-bottom:1rem;padding-top:1rem;border-top:1px solid rgba(255,255,255,.06)">
+          <label class="form-label">🍽️ Début pause</label>
+          <select class="select-input" id="heure-debut-pause" style="font-size:1.05rem;font-weight:600" onchange="calcHeures()">
+        <option value="">--:--</option>
+        <option value="05:00">05:00</option>
+        <option value="05:15">05:15</option>
+        <option value="05:30">05:30</option>
+        <option value="05:45">05:45</option>
+        <option value="06:00">06:00</option>
+        <option value="06:15">06:15</option>
+        <option value="06:30">06:30</option>
+        <option value="06:45">06:45</option>
+        <option value="07:00">07:00</option>
+        <option value="07:15">07:15</option>
+        <option value="07:30">07:30</option>
+        <option value="07:45">07:45</option>
+        <option value="08:00">08:00</option>
+        <option value="08:15">08:15</option>
+        <option value="08:30">08:30</option>
+        <option value="08:45">08:45</option>
+        <option value="09:00">09:00</option>
+        <option value="09:15">09:15</option>
+        <option value="09:30">09:30</option>
+        <option value="09:45">09:45</option>
+        <option value="10:00">10:00</option>
+        <option value="10:15">10:15</option>
+        <option value="10:30">10:30</option>
+        <option value="10:45">10:45</option>
+        <option value="11:00">11:00</option>
+        <option value="11:15">11:15</option>
+        <option value="11:30">11:30</option>
+        <option value="11:45">11:45</option>
+        <option value="12:00">12:00</option>
+        <option value="12:15">12:15</option>
+        <option value="12:30">12:30</option>
+        <option value="12:45">12:45</option>
+        <option value="13:00">13:00</option>
+        <option value="13:15">13:15</option>
+        <option value="13:30">13:30</option>
+        <option value="13:45">13:45</option>
+        <option value="14:00">14:00</option>
+        <option value="14:15">14:15</option>
+        <option value="14:30">14:30</option>
+        <option value="14:45">14:45</option>
+        <option value="15:00">15:00</option>
+        <option value="15:15">15:15</option>
+        <option value="15:30">15:30</option>
+        <option value="15:45">15:45</option>
+        <option value="16:00">16:00</option>
+        <option value="16:15">16:15</option>
+        <option value="16:30">16:30</option>
+        <option value="16:45">16:45</option>
+        <option value="17:00">17:00</option>
+        <option value="17:15">17:15</option>
+        <option value="17:30">17:30</option>
+        <option value="17:45">17:45</option>
+        <option value="18:00">18:00</option>
+        <option value="18:15">18:15</option>
+        <option value="18:30">18:30</option>
+        <option value="18:45">18:45</option>
+        <option value="19:00">19:00</option>
+        <option value="19:15">19:15</option>
+        <option value="19:30">19:30</option>
+        <option value="19:45">19:45</option>
+        <option value="20:00">20:00</option>
+        <option value="20:15">20:15</option>
+        <option value="20:30">20:30</option>
+        <option value="20:45">20:45</option>
+        <option value="21:00">21:00</option>
+        <option value="21:15">21:15</option>
+        <option value="21:30">21:30</option>
+        <option value="21:45">21:45</option>
+        <option value="22:00">22:00</option>
+        <option value="22:15">22:15</option>
+        <option value="22:30">22:30</option>
+        <option value="22:45">22:45</option>
+        <option value="22:00">22:00</option>
+
+          </select>
+        </div>
+
+        <div style="margin-bottom:1rem;padding-top:1rem;border-top:1px solid rgba(255,255,255,.06)">
+          <label class="form-label">🍽️ Fin pause</label>
+          <select class="select-input" id="heure-fin-pause" style="font-size:1.05rem;font-weight:600" onchange="calcHeures()">
+        <option value="">--:--</option>
+        <option value="05:00">05:00</option>
+        <option value="05:15">05:15</option>
+        <option value="05:30">05:30</option>
+        <option value="05:45">05:45</option>
+        <option value="06:00">06:00</option>
+        <option value="06:15">06:15</option>
+        <option value="06:30">06:30</option>
+        <option value="06:45">06:45</option>
+        <option value="07:00">07:00</option>
+        <option value="07:15">07:15</option>
+        <option value="07:30">07:30</option>
+        <option value="07:45">07:45</option>
+        <option value="08:00">08:00</option>
+        <option value="08:15">08:15</option>
+        <option value="08:30">08:30</option>
+        <option value="08:45">08:45</option>
+        <option value="09:00">09:00</option>
+        <option value="09:15">09:15</option>
+        <option value="09:30">09:30</option>
+        <option value="09:45">09:45</option>
+        <option value="10:00">10:00</option>
+        <option value="10:15">10:15</option>
+        <option value="10:30">10:30</option>
+        <option value="10:45">10:45</option>
+        <option value="11:00">11:00</option>
+        <option value="11:15">11:15</option>
+        <option value="11:30">11:30</option>
+        <option value="11:45">11:45</option>
+        <option value="12:00">12:00</option>
+        <option value="12:15">12:15</option>
+        <option value="12:30">12:30</option>
+        <option value="12:45">12:45</option>
+        <option value="13:00">13:00</option>
+        <option value="13:15">13:15</option>
+        <option value="13:30">13:30</option>
+        <option value="13:45">13:45</option>
+        <option value="14:00">14:00</option>
+        <option value="14:15">14:15</option>
+        <option value="14:30">14:30</option>
+        <option value="14:45">14:45</option>
+        <option value="15:00">15:00</option>
+        <option value="15:15">15:15</option>
+        <option value="15:30">15:30</option>
+        <option value="15:45">15:45</option>
+        <option value="16:00">16:00</option>
+        <option value="16:15">16:15</option>
+        <option value="16:30">16:30</option>
+        <option value="16:45">16:45</option>
+        <option value="17:00">17:00</option>
+        <option value="17:15">17:15</option>
+        <option value="17:30">17:30</option>
+        <option value="17:45">17:45</option>
+        <option value="18:00">18:00</option>
+        <option value="18:15">18:15</option>
+        <option value="18:30">18:30</option>
+        <option value="18:45">18:45</option>
+        <option value="19:00">19:00</option>
+        <option value="19:15">19:15</option>
+        <option value="19:30">19:30</option>
+        <option value="19:45">19:45</option>
+        <option value="20:00">20:00</option>
+        <option value="20:15">20:15</option>
+        <option value="20:30">20:30</option>
+        <option value="20:45">20:45</option>
+        <option value="21:00">21:00</option>
+        <option value="21:15">21:15</option>
+        <option value="21:30">21:30</option>
+        <option value="21:45">21:45</option>
+        <option value="22:00">22:00</option>
+        <option value="22:15">22:15</option>
+        <option value="22:30">22:30</option>
+        <option value="22:45">22:45</option>
+        <option value="22:00">22:00</option>
+
+          </select>
+        </div>
+
+        <div style="padding-top:1rem;border-top:1px solid rgba(255,255,255,.06)">
+          <label class="form-label">🔴 Heure de départ</label>
+          <select class="select-input" id="heure-depart" style="font-size:1.05rem;font-weight:600" onchange="calcHeures()">
+        <option value="">--:--</option>
+        <option value="05:00">05:00</option>
+        <option value="05:15">05:15</option>
+        <option value="05:30">05:30</option>
+        <option value="05:45">05:45</option>
+        <option value="06:00">06:00</option>
+        <option value="06:15">06:15</option>
+        <option value="06:30">06:30</option>
+        <option value="06:45">06:45</option>
+        <option value="07:00">07:00</option>
+        <option value="07:15">07:15</option>
+        <option value="07:30">07:30</option>
+        <option value="07:45">07:45</option>
+        <option value="08:00">08:00</option>
+        <option value="08:15">08:15</option>
+        <option value="08:30">08:30</option>
+        <option value="08:45">08:45</option>
+        <option value="09:00">09:00</option>
+        <option value="09:15">09:15</option>
+        <option value="09:30">09:30</option>
+        <option value="09:45">09:45</option>
+        <option value="10:00">10:00</option>
+        <option value="10:15">10:15</option>
+        <option value="10:30">10:30</option>
+        <option value="10:45">10:45</option>
+        <option value="11:00">11:00</option>
+        <option value="11:15">11:15</option>
+        <option value="11:30">11:30</option>
+        <option value="11:45">11:45</option>
+        <option value="12:00">12:00</option>
+        <option value="12:15">12:15</option>
+        <option value="12:30">12:30</option>
+        <option value="12:45">12:45</option>
+        <option value="13:00">13:00</option>
+        <option value="13:15">13:15</option>
+        <option value="13:30">13:30</option>
+        <option value="13:45">13:45</option>
+        <option value="14:00">14:00</option>
+        <option value="14:15">14:15</option>
+        <option value="14:30">14:30</option>
+        <option value="14:45">14:45</option>
+        <option value="15:00">15:00</option>
+        <option value="15:15">15:15</option>
+        <option value="15:30">15:30</option>
+        <option value="15:45">15:45</option>
+        <option value="16:00">16:00</option>
+        <option value="16:15">16:15</option>
+        <option value="16:30">16:30</option>
+        <option value="16:45">16:45</option>
+        <option value="17:00">17:00</option>
+        <option value="17:15">17:15</option>
+        <option value="17:30">17:30</option>
+        <option value="17:45">17:45</option>
+        <option value="18:00">18:00</option>
+        <option value="18:15">18:15</option>
+        <option value="18:30">18:30</option>
+        <option value="18:45">18:45</option>
+        <option value="19:00">19:00</option>
+        <option value="19:15">19:15</option>
+        <option value="19:30">19:30</option>
+        <option value="19:45">19:45</option>
+        <option value="20:00">20:00</option>
+        <option value="20:15">20:15</option>
+        <option value="20:30">20:30</option>
+        <option value="20:45">20:45</option>
+        <option value="21:00">21:00</option>
+        <option value="21:15">21:15</option>
+        <option value="21:30">21:30</option>
+        <option value="21:45">21:45</option>
+        <option value="22:00">22:00</option>
+        <option value="22:15">22:15</option>
+        <option value="22:30">22:30</option>
+        <option value="22:45">22:45</option>
+        <option value="22:00">22:00</option>
+
+          </select>
+        </div>
+      </div>
+
+      <!-- CALCUL AUTO -->
+      <div class="card" id="calcul-heures-card">
+        <div class="card-title"><span class="dot" style="background:var(--green)"></span>Récapitulatif</div>
+        <div class="rapport-block"><div class="rapport-title">Temps de travail</div><div id="calc-travail" style="font-size:1.1rem;font-weight:600">—</div></div>
+        <div class="rapport-block"><div class="rapport-title">Durée pause</div><div id="calc-pause" style="font-size:1.1rem;font-weight:600">—</div></div>
+        <div class="rapport-block"><div class="rapport-title">Heures effectives</div><div id="calc-effectif" style="font-size:1.3rem;font-weight:700;color:var(--primary)">—</div></div>
+        <div class="rapport-block"><div class="rapport-title">Heures sup (base 7h/j)</div><div id="calc-sup" style="font-size:1.1rem;font-weight:600">—</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><span class="dot"></span>Note</div>
+        <textarea class="form-textarea" id="heures-note" placeholder="Remarque sur la journée..."></textarea>
+      </div>
+
+      <button class="submit-btn" style="margin:0 1.25rem 1.5rem;width:calc(100% - 2.5rem)" onclick="saveHeures()">💾 ENREGISTRER MES HEURES</button>
+    </div>
+
     <div id="tech-rapport" class="tab-content content">
       <div class="card" style="background:linear-gradient(135deg,var(--steel),var(--steel-mid))">
         <div class="card-title" style="color:white;margin-bottom:.25rem">📋 Rapport journalier</div>
@@ -403,6 +767,7 @@ window.LOGO_B64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/4QBmRXhpZg
     <div class="nav-item" onclick="switchMgrTab('rapports',this)"><span class="nav-icon">📋</span><span>Rapports</span></div>
     <div class="nav-item" onclick="switchMgrTab('objectifs',this)"><span class="nav-icon">🎯</span><span>Objectifs</span></div>
     <div class="nav-item" onclick="switchMgrTab('alertes',this)"><span class="nav-icon" id="alertes-icon">🔔</span><span>Alertes</span></div>
+    <div class="nav-item" onclick="switchMgrTab('paie',this)"><span class="nav-icon">💶</span><span>Paie</span></div>
   </div>
   <div class="main-scroll">
 
@@ -496,6 +861,29 @@ window.LOGO_B64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/4QBmRXhpZg
       <div id="alertes-list"><div class="empty-state"><div class="empty-icon">🟢</div><div>Aucune alerte active.</div></div></div>
     </div>
 
+    <!-- PAIE TAB -->
+    <div id="mgr-paie" class="tab-content content">
+      <div class="date-banner">
+        <div><div class="date-main">Suivi Heures</div><div style="font-size:.78rem;color:var(--concrete-light)" id="paie-periode">—</div></div>
+        <div class="date-badge" id="paie-semaine-badge">Semaine en cours</div>
+      </div>
+
+      <!-- Sélecteur semaine -->
+      <div class="card">
+        <div class="card-title"><span class="dot"></span>Période</div>
+        <div style="display:flex;gap:.75rem;align-items:center">
+          <button class="counter-btn" onclick="changeSemaine(-1)">←</button>
+          <div style="flex:1;text-align:center;font-weight:600;font-size:.9rem" id="paie-semaine-label">Semaine actuelle</div>
+          <button class="counter-btn" onclick="changeSemaine(+1)">→</button>
+        </div>
+      </div>
+
+      <!-- Tableau par technicien -->
+      <div id="paie-tech-list">
+        <div style="color:var(--text-dim);font-size:.85rem;text-align:center;padding:2rem">Aucune donnée pour cette période</div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -564,6 +952,11 @@ function switchTechTab(tab,el){
   if(el)el.classList.add('active');
   if(tab==='rapport')updateRapportSummary();
   if(tab==='dashboard')updateTechDashboard();
+  if(tab==='heures'){
+    const hd = document.getElementById('heures-date');
+    if(hd) hd.textContent = formatDate();
+    calcHeures();
+  }
 }
 
 function switchMgrTab(tab,el){
@@ -571,6 +964,7 @@ function switchMgrTab(tab,el){
   document.querySelectorAll('#screen-manager .nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('mgr-'+tab).classList.add('active');
   if(el)el.classList.add('active');
+  if(tab==='paie') loadPaieData();
 }
 
 // DATE/TIME
@@ -1021,6 +1415,217 @@ if(window.LOGO_B64){
 document.getElementById('date-display')&&(document.getElementById('date-display').textContent=formatDate());
 document.getElementById('login-pin')?.addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
 document.getElementById('login-user')?.addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('login-pin').focus();});
+</script>
+
+<script>
+// ═══════════ HEURES / POINTAGE ═══════════
+var typeJournee = 'travail';
+var currentSemaine = 0;
+
+function setTypeJournee(type, el) {
+  typeJournee = type;
+  document.querySelectorAll('.type-btn').forEach(function(b) {
+    b.style.borderColor = 'rgba(255,255,255,.1)';
+    b.style.background = 'var(--bg3)';
+    b.style.color = 'var(--text-dim)';
+  });
+  el.style.borderColor = 'var(--primary)';
+  el.style.background = 'rgba(46,125,50,.15)';
+  el.style.color = 'var(--primary)';
+  var pc = document.getElementById('pointage-card');
+  if(pc) pc.style.display = (type === 'travail') ? 'block' : 'none';
+  var cc = document.getElementById('calcul-heures-card');
+  if(cc) cc.style.display = (type === 'travail') ? 'block' : 'none';
+}
+
+function toMin(t) { if(!t) return null; var p=t.split(':'); return parseInt(p[0])*60+parseInt(p[1]); }
+function toHHMM(m) { if(m===null||m===undefined||isNaN(m)) return '—'; var h=Math.floor(Math.abs(m)/60),mn=Math.abs(m)%60; return (m<0?'-':'')+(h+'h'+String(mn).padStart(2,'0')); }
+
+function calcHeures() {
+  var arrivee = document.getElementById('heure-arrivee') ? document.getElementById('heure-arrivee').value : '';
+  var debutPause = document.getElementById('heure-debut-pause') ? document.getElementById('heure-debut-pause').value : '';
+  var finPause = document.getElementById('heure-fin-pause') ? document.getElementById('heure-fin-pause').value : '';
+  var depart = document.getElementById('heure-depart') ? document.getElementById('heure-depart').value : '';
+
+  var aMin = toMin(arrivee), dMin = toMin(depart);
+  var dpMin = toMin(debutPause), fpMin = toMin(finPause);
+  var pauseMin = 0;
+  if(dpMin !== null && fpMin !== null && fpMin > dpMin) pauseMin = fpMin - dpMin;
+
+  var travailMin = null, effectifMin = null, supMin = null;
+  if(aMin !== null && dMin !== null && dMin > aMin) {
+    travailMin = dMin - aMin;
+    effectifMin = travailMin - pauseMin;
+    supMin = effectifMin - 7*60;
+  }
+
+  var ct = document.getElementById('calc-travail');
+  var cp = document.getElementById('calc-pause');
+  var ce = document.getElementById('calc-effectif');
+  var cs = document.getElementById('calc-sup');
+  var badge = document.getElementById('heures-total-badge');
+
+  if(ct) ct.textContent = toHHMM(travailMin);
+  if(cp) cp.textContent = toHHMM(pauseMin > 0 ? pauseMin : null);
+  if(ce) ce.textContent = toHHMM(effectifMin);
+  if(cs) cs.textContent = supMin !== null ? (supMin >= 0 ? '+'+toHHMM(supMin) : toHHMM(supMin)) : '—';
+  if(badge && effectifMin !== null) badge.textContent = toHHMM(effectifMin);
+}
+
+function saveHeures() {
+  if(!window.currentUser) { showNotif('Non connecté ❌','error'); return; }
+  if(!window._fbReady) { showNotif('Firebase non prêt ❌','error'); return; }
+
+  var arrivee = document.getElementById('heure-arrivee').value;
+  var debutPause = document.getElementById('heure-debut-pause').value;
+  var finPause = document.getElementById('heure-fin-pause').value;
+  var depart = document.getElementById('heure-depart').value;
+  var note = document.getElementById('heures-note').value;
+
+  if(typeJournee === 'travail' && !arrivee) { showNotif("Entrer l'heure d'arrivée ❌", 'error'); return; }
+
+  var aMin = toMin(arrivee), dMin = toMin(depart);
+  var dpMin = toMin(debutPause), fpMin = toMin(finPause);
+  var pauseMin = 0;
+  if(dpMin !== null && fpMin !== null && fpMin > dpMin) pauseMin = fpMin - dpMin;
+  var effectifMin = null;
+  if(aMin !== null && dMin !== null && dMin > aMin) effectifMin = (dMin - aMin) - pauseMin;
+
+  var now = new Date();
+  var pointage = {
+    technicien: window.currentUser,
+    technicien_nom: window.TECHNICIENS[window.currentUser].nom,
+    date: now.toLocaleDateString('fr-FR'),
+    dateISO: now.toISOString().split('T')[0],
+    semaine: getWeekNumber(now),
+    annee: now.getFullYear(),
+    typeJournee: typeJournee,
+    arrivee: arrivee, debutPause: debutPause, finPause: finPause, depart: depart,
+    pauseMin: pauseMin, effectifMin: effectifMin,
+    note: note,
+    timestamp: Date.now()
+  };
+
+  var fsObj = window._fs;
+  var dbObj = window._db;
+  fsObj.addDoc(fsObj.collection(dbObj, 'pointages'), pointage)
+    .then(function() { showNotif('⏰ Heures enregistrées !'); })
+    .catch(function() { showNotif('Erreur enregistrement ❌', 'error'); });
+}
+
+function getWeekNumber(d) {
+  var date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  var dayNum = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+  var yearStart = new Date(Date.UTC(date.getUTCFullYear(),0,1));
+  return Math.ceil((((date - yearStart) / 86400000) + 1)/7);
+}
+
+function getWeekDates(offset) {
+  var now = new Date();
+  var day = now.getDay() || 7;
+  var monday = new Date(now);
+  monday.setDate(now.getDate() - day + 1 + offset * 7);
+  var sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  return { monday: monday, sunday: sunday };
+}
+
+function changeSemaine(delta) {
+  currentSemaine += delta;
+  loadPaieData();
+}
+
+function loadPaieData() {
+  if(!window._fbReady) return;
+  var fsObj = window._fs;
+  var dbObj = window._db;
+  var dates = getWeekDates(currentSemaine);
+  var monday = dates.monday;
+  var sunday = dates.sunday;
+
+  var label = document.getElementById('paie-semaine-label');
+  var badge = document.getElementById('paie-semaine-badge');
+  var periode = document.getElementById('paie-periode');
+  if(label) label.textContent = monday.toLocaleDateString('fr-FR') + ' → ' + sunday.toLocaleDateString('fr-FR');
+  if(badge) badge.textContent = currentSemaine === 0 ? 'Semaine en cours' : 'S'+getWeekNumber(monday);
+  if(periode) periode.textContent = 'Semaine ' + getWeekNumber(monday) + ' — ' + monday.getFullYear();
+
+  var weekDates = [];
+  for(var i=0; i<7; i++) {
+    var d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    weekDates.push(d.toLocaleDateString('fr-FR'));
+  }
+
+  var q = fsObj.query(fsObj.collection(dbObj, 'pointages'), fsObj.orderBy('timestamp', 'desc'));
+  fsObj.onSnapshot(q, function(snap) {
+    var allPointages = snap.docs.map(function(d) { return Object.assign({id: d.id}, d.data()); });
+    var weekPointages = allPointages.filter(function(p) { return weekDates.indexOf(p.date) >= 0; });
+    renderPaieData(weekPointages, weekDates);
+  });
+}
+
+function renderPaieData(pointages, weekDates) {
+  var container = document.getElementById('paie-tech-list');
+  if(!container) return;
+  var TECHNICIENS = window.TECHNICIENS;
+  var html = '';
+
+  Object.entries(TECHNICIENS).forEach(function(entry) {
+    var key = entry[0], info = entry[1];
+    var techPointages = pointages.filter(function(p) { return p.technicien === key; });
+    var totalMin = 0, joursTravailes = 0, heuresSupMin = 0;
+
+    var jours = weekDates.slice(0,5).map(function(dateStr) {
+      var p = techPointages.find(function(x) { return x.date === dateStr; });
+      if(!p) return { date: dateStr, label: '—', min: 0, type: 'absent' };
+      if(p.typeJournee !== 'travail') return { date: dateStr, label: p.typeJournee, min: 0, type: p.typeJournee };
+      joursTravailes++;
+      var m = p.effectifMin || 0;
+      totalMin += m;
+      heuresSupMin += m - 7*60;
+      return { date: dateStr, label: toHHMM(m), min: m, type: 'travail' };
+    });
+
+    var baseMin = 35*60;
+    var diffMin = totalMin - baseMin;
+
+    html += '<div class="card" style="margin-bottom:.75rem">';
+    html += '<div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem">';
+    html += '<div class="tech-avatar-sm" style="background:linear-gradient(135deg,#1e3a5f,'+info.color+')">'+info.nom.charAt(0)+'</div>';
+    html += '<div style="flex:1"><div style="font-weight:700;font-size:1rem">'+info.nom+'</div>';
+    html += '<div style="font-size:.75rem;color:var(--text-dim)">'+joursTravailes+' jour(s) · '+toHHMM(totalMin)+' / 35h</div></div>';
+    html += '<span class="badge '+(diffMin>=0?'badge-green':'badge-red')+'">'+(diffMin>=0?'+':'')+toHHMM(diffMin)+'</span>';
+    html += '</div><div style="display:grid;grid-template-columns:repeat(5,1fr);gap:.35rem;margin-bottom:.75rem">';
+
+    jours.forEach(function(j) {
+      var parts = j.date.split('/');
+      var d = new Date(parts[2]+'-'+parts[1]+'-'+parts[0]);
+      var dayName = d.toLocaleDateString('fr-FR',{weekday:'short'});
+      var col = j.type==='travail' ? 'var(--primary)' : j.type==='conge' ? 'var(--yellow)' : j.type==='maladie' ? 'var(--red)' : 'rgba(255,255,255,.1)';
+      var textCol = j.type==='absent' ? 'var(--text-dim)' : col;
+      html += '<div style="background:'+col+'22;border:1px solid '+col+'44;border-radius:6px;padding:.4rem;text-align:center">';
+      html += '<div style="font-size:.65rem;color:var(--text-dim);margin-bottom:2px">'+dayName+'</div>';
+      html += '<div style="font-size:.75rem;font-weight:600;color:'+textCol+'">'+j.label+'</div></div>';
+    });
+
+    html += '</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">';
+    html += '<div class="rapport-block" style="margin:0"><div class="rapport-title">Total heures</div><div style="font-weight:700;color:var(--primary)">'+toHHMM(totalMin)+'</div></div>';
+    html += '<div class="rapport-block" style="margin:0"><div class="rapport-title">Heures sup</div><div style="font-weight:700;color:'+(heuresSupMin>=0?'var(--green)':'var(--red)')+'">'+(heuresSupMin>=0?'+':'')+toHHMM(heuresSupMin)+'</div></div>';
+    html += '</div></div>';
+  });
+
+  container.innerHTML = html || '<div style="color:var(--text-dim);font-size:.85rem;text-align:center;padding:2rem">Aucune donnée pour cette semaine</div>';
+}
+
+// Init time inputs listeners
+document.addEventListener('DOMContentLoaded', function() {
+  ['heure-arrivee','heure-debut-pause','heure-fin-pause','heure-depart'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if(el) el.addEventListener('change', calcHeures);
+  });
+});
 </script>
 </body>
 </html>
