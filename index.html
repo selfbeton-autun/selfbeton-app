@@ -387,7 +387,7 @@ window.LOGO_B64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/4QBmRXhpZg
 
         <div style="margin-bottom:1rem">
           <label class="form-label">🟢 Heure d'arrivée</label>
-          <select class="select-input" id="heure-arrivee" style="font-size:1.05rem;font-weight:600" onchange="calcHeures()">
+          <select class="select-input" id="heure-arrivee" style="font-size:1.05rem;font-weight:600" onchange="if(window.calcHeures)window.calcHeures()">
         <option value="">--:--</option>
         <option value="05:00">05:00</option>
         <option value="05:15">05:15</option>
@@ -468,7 +468,7 @@ window.LOGO_B64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/4QBmRXhpZg
 
         <div style="margin-bottom:1rem;padding-top:1rem;border-top:1px solid rgba(255,255,255,.06)">
           <label class="form-label">🍽️ Début pause</label>
-          <select class="select-input" id="heure-debut-pause" style="font-size:1.05rem;font-weight:600" onchange="calcHeures()">
+          <select class="select-input" id="heure-debut-pause" style="font-size:1.05rem;font-weight:600" onchange="if(window.calcHeures)window.calcHeures()">
         <option value="">--:--</option>
         <option value="05:00">05:00</option>
         <option value="05:15">05:15</option>
@@ -549,7 +549,7 @@ window.LOGO_B64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/4QBmRXhpZg
 
         <div style="margin-bottom:1rem;padding-top:1rem;border-top:1px solid rgba(255,255,255,.06)">
           <label class="form-label">🍽️ Fin pause</label>
-          <select class="select-input" id="heure-fin-pause" style="font-size:1.05rem;font-weight:600" onchange="calcHeures()">
+          <select class="select-input" id="heure-fin-pause" style="font-size:1.05rem;font-weight:600" onchange="if(window.calcHeures)window.calcHeures()">
         <option value="">--:--</option>
         <option value="05:00">05:00</option>
         <option value="05:15">05:15</option>
@@ -630,7 +630,7 @@ window.LOGO_B64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/4QBmRXhpZg
 
         <div style="padding-top:1rem;border-top:1px solid rgba(255,255,255,.06)">
           <label class="form-label">🔴 Heure de départ</label>
-          <select class="select-input" id="heure-depart" style="font-size:1.05rem;font-weight:600" onchange="calcHeures()">
+          <select class="select-input" id="heure-depart" style="font-size:1.05rem;font-weight:600" onchange="if(window.calcHeures)window.calcHeures()">
         <option value="">--:--</option>
         <option value="05:00">05:00</option>
         <option value="05:15">05:15</option>
@@ -1691,7 +1691,7 @@ function checkHeuresRappel() {
       var div = document.createElement('div');
       div.id = 'heures-rappel-banner';
       div.style.cssText = 'background:rgba(232,93,74,.15);border:1.5px solid var(--red);border-radius:12px;padding:1rem 1.25rem;margin-bottom:1rem;display:flex;align-items:center;gap:.75rem;cursor:pointer';
-      div.innerHTML = '<span style="font-size:1.5rem">⏰</span><div style="flex:1"><div style="font-weight:600;font-size:.9rem;color:var(--red)">Heures non enregistrées</div><div style="font-size:.78rem;color:var(--text-dim)">N'oublie pas de pointer ta journée !</div></div><span style="color:var(--red);font-size:1.2rem">→</span>';
+      div.innerHTML = '<span style="font-size:1.5rem">⏰</span><div style="flex:1"><div style="font-weight:600;font-size:.9rem;color:var(--red)">Heures non enregistrees</div><div style="font-size:.78rem;color:var(--text-dim)">Pense a pointer ta journee</div></div><span style="color:var(--red);font-size:1.2rem">&rarr;</span>';
       div.onclick = function() {
         // Navigate to heures tab
         var heuresNav = document.querySelector('#screen-tech .nav-item:nth-child(4)');
