@@ -29,8 +29,17 @@ window._fbReady = true;
 // ═══ SAUVEGARDE HEURES (dans module Firebase pour accès direct) ═══
 window.doSaveHeures = async function(data) {
   try {
-    await addDoc(collection(db, 'pointages'), data);
-    window.showNotif('Heures enregistrees !');
+    const existingId = data.existingId;
+    delete data.existingId;
+    if(existingId) {
+      // Update existing document
+      const { doc: docRef, setDoc } = window._fs;
+      await setDoc(doc(db, 'pointages', existingId), data);
+      window.showNotif('Heures modifiees !');
+    } else {
+      await addDoc(collection(db, 'pointages'), data);
+      window.showNotif('Heures enregistrees !');
+    }
   } catch(e) {
     window.showNotif('Erreur: ' + e.message, 'error');
   }
@@ -38,6 +47,43 @@ window.doSaveHeures = async function(data) {
 
 window.doLoadPointages = function(callback) {
   const q = query(collection(db, 'pointages'), orderBy('timestamp', 'desc'));
+  return onSnapshot(q, snap => {
+    callback(snap.docs.map(d => ({id: d.id, ...d.data()})));
+  });
+};
+
+window.doSaveSectionReport = async function(data) {
+  try {
+    await addDoc(collection(db, 'section_reports'), data);
+    // Notify via Firestore (manager will receive via listener)
+  } catch(e) {
+    console.error('Error saving section report:', e);
+  }
+};
+
+window.doLoadSectionReports = function(callback) {
+  const q = query(collection(db, 'section_reports'), orderBy('timestamp', 'desc'));
+  return onSnapshot(q, snap => {
+    callback(snap.docs.map(d => ({id: d.id, ...d.data()})));
+  });
+};
+
+window.doSaveSignature = async function(data) {
+  try {
+    await addDoc(collection(db, 'signatures'), data);
+    window._semaineSignature = data;
+    window.showNotif('Semaine signee et validee !');
+    // Update signature block
+    var block = document.getElementById('signature-block');
+    if(block) block.innerHTML = '<div class="card" style="background:rgba(46,125,50,.1);border:1.5px solid var(--primary)"><div style="text-align:center;padding:1rem"><div style="font-size:1.5rem">&#10003;</div><div style="font-weight:600;color:var(--primary);margin-top:.5rem">Semaine validee et signee</div></div></div>';
+  } catch(e) {
+    window.showNotif('Erreur signature', 'error');
+  }
+};
+
+// Load latest signature for manager view
+window.doLoadSignatures = function(callback) {
+  const q = query(collection(db, 'signatures'), orderBy('timestamp', 'desc'));
   return onSnapshot(q, snap => {
     callback(snap.docs.map(d => ({id: d.id, ...d.data()})));
   });
@@ -384,18 +430,25 @@ window.LOGO_B64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/4QBmRXhpZg
 
     <div id="tech-heures" class="tab-content content">
       <div class="date-banner">
-        <div><div class="date-main" id="heures-date">—</div><div style="font-size:.78rem;color:var(--concrete-light)">Pointage du jour</div></div>
-        <div class="date-badge" id="heures-total-badge">0h00</div>
+        <div style="flex:1">
+          <div class="date-main" id="heures-date">—</div>
+          <div style="font-size:.78rem;color:var(--concrete-light)">Pointage</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:.5rem">
+          <button onclick="changeHeuresDate(-1)" style="width:30px;height:30px;border-radius:6px;background:rgba(255,255,255,.15);border:none;color:white;font-size:1rem;cursor:pointer">←</button>
+          <div class="date-badge" id="heures-total-badge">0h00</div>
+          <button onclick="changeHeuresDate(+1)" id="heures-next-btn" style="width:30px;height:30px;border-radius:6px;background:rgba(255,255,255,.15);border:none;color:white;font-size:1rem;cursor:pointer">→</button>
+        </div>
       </div>
 
       <!-- TYPE DE JOURNEE -->
       <div class="card">
         <div class="card-title"><span class="dot" style="background:var(--yellow)"></span>Type de journée</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem" id="type-journee-btns">
-          <button class="type-btn active" onclick="setTypeJournee('travail',this)" style="padding:.75rem;border-radius:8px;border:2px solid var(--primary);background:rgba(46,125,50,.15);color:var(--primary);font-family:inherit;font-size:.85rem;font-weight:600;cursor:pointer">💼 Journée travail</button>
-          <button class="type-btn" onclick="setTypeJournee('conge',this)" style="padding:.75rem;border-radius:8px;border:2px solid rgba(255,255,255,.1);background:var(--bg3);color:var(--text-dim);font-family:inherit;font-size:.85rem;font-weight:600;cursor:pointer">🏖️ Congé</button>
-          <button class="type-btn" onclick="setTypeJournee('maladie',this)" style="padding:.75rem;border-radius:8px;border:2px solid rgba(255,255,255,.1);background:var(--bg3);color:var(--text-dim);font-family:inherit;font-size:.85rem;font-weight:600;cursor:pointer">🤒 Maladie</button>
-          <button class="type-btn" onclick="setTypeJournee('absent',this)" style="padding:.75rem;border-radius:8px;border:2px solid rgba(255,255,255,.1);background:var(--bg3);color:var(--text-dim);font-family:inherit;font-size:.85rem;font-weight:600;cursor:pointer">❌ Absence</button>
+          <button class="type-btn active" onclick="setTypeJournee('travail',this)" data-type="travail" style="padding:.75rem;border-radius:8px;border:2px solid var(--primary);background:rgba(46,125,50,.15);color:var(--primary);font-family:inherit;font-size:.85rem;font-weight:600;cursor:pointer">💼 Journée travail</button>
+          <button class="type-btn" onclick="setTypeJournee('conge',this)" data-type="conge" style="padding:.75rem;border-radius:8px;border:2px solid rgba(255,255,255,.1);background:var(--bg3);color:var(--text-dim);font-family:inherit;font-size:.85rem;font-weight:600;cursor:pointer">🏖️ Congé</button>
+          <button class="type-btn" onclick="setTypeJournee('maladie',this)" data-type="maladie" style="padding:.75rem;border-radius:8px;border:2px solid rgba(255,255,255,.1);background:var(--bg3);color:var(--text-dim);font-family:inherit;font-size:.85rem;font-weight:600;cursor:pointer">🤒 Maladie</button>
+          <button class="type-btn" onclick="setTypeJournee('absent',this)" data-type="absent" style="padding:.75rem;border-radius:8px;border:2px solid rgba(255,255,255,.1);background:var(--bg3);color:var(--text-dim);font-family:inherit;font-size:.85rem;font-weight:600;cursor:pointer">❌ Absence</button>
         </div>
       </div>
 
@@ -742,7 +795,20 @@ window.LOGO_B64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/4QBmRXhpZg
         <textarea class="form-textarea" id="heures-note" placeholder="Remarque sur la journée..."></textarea>
       </div>
 
-      <button class="submit-btn" style="margin:0 1.25rem 1.5rem;width:calc(100% - 2.5rem)" onclick="saveHeures()">💾 ENREGISTRER MES HEURES</button>
+      <button id="save-heures-btn" class="submit-btn" style="margin:0 1.25rem .75rem;width:calc(100% - 2.5rem)" onclick="saveHeures()">💾 ENREGISTRER MES HEURES</button>
+
+      <!-- SIGNATURE VENDREDI -->
+      <div id="signature-block" style="display:none;margin:0 1.25rem 1.5rem">
+        <div class="card">
+          <div class="card-title"><span class="dot" style="background:var(--yellow)"></span>Signature semaine</div>
+          <p style="font-size:.82rem;color:var(--text-dim);margin-bottom:.75rem">Signe pour valider tes heures de la semaine.</p>
+          <canvas id="signature-pad" width="320" height="150" style="width:100%;border:2px solid rgba(255,255,255,.15);border-radius:8px;background:#fff;touch-action:none;cursor:crosshair"></canvas>
+          <div style="display:flex;gap:.5rem;margin-top:.5rem">
+            <button onclick="clearSignature()" style="flex:1;padding:.6rem;background:var(--bg3);border:1px solid rgba(255,255,255,.1);border-radius:8px;color:var(--text-dim);font-family:inherit;font-size:.85rem;cursor:pointer">🗑️ Effacer</button>
+            <button onclick="saveSignature()" style="flex:2;padding:.6rem;background:var(--primary);border:none;border-radius:8px;color:white;font-family:inherit;font-size:.85rem;font-weight:600;cursor:pointer">✅ VALIDER LA SEMAINE</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div id="tech-rapport" class="tab-content content">
@@ -780,8 +846,7 @@ window.LOGO_B64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/4QBmRXhpZg
   </div>
   <div class="bottom-nav">
     <div class="nav-item active" onclick="switchMgrTab('overview',this)"><span class="nav-icon">📊</span><span>Vue globale</span></div>
-    <div class="nav-item" onclick="switchMgrTab('commandes',this)"><span class="nav-icon">🛒</span><span>Commandes</span></div>
-    <div class="nav-item" onclick="switchMgrTab('rapports',this)"><span class="nav-icon">📋</span><span>Rapports</span></div>
+    <div class="nav-item" onclick="switchMgrTab('sections',this)"><span class="nav-icon">📋</span><span>Rapports</span></div>
     <div class="nav-item" onclick="switchMgrTab('objectifs',this)"><span class="nav-icon">🎯</span><span>Objectifs</span></div>
     <div class="nav-item" onclick="switchMgrTab('alertes',this)"><span class="nav-icon" id="alertes-icon">🔔</span><span>Alertes</span></div>
     <div class="nav-item" onclick="switchMgrTab('paie',this)"><span class="nav-icon">💶</span><span>Paie</span></div>
@@ -839,9 +904,18 @@ window.LOGO_B64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/4QBmRXhpZg
       </div>
     </div>
 
-    <div id="mgr-rapports" class="tab-content content">
-      <div style="font-family:'Barlow Condensed',sans-serif;font-size:1.3rem;font-weight:700;margin-bottom:1rem">Rapports reçus <span id="rapports-count-label" style="color:var(--primary)"></span></div>
-      <div id="rapports-list"><div class="empty-state"><div class="empty-icon">📭</div><div>Aucun rapport reçu.</div></div></div>
+    <div id="mgr-sections" class="tab-content content">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:1.3rem;font-weight:700;margin-bottom:1rem">Rapports par section</div>
+
+      <!-- Filter tabs -->
+      <div style="display:flex;gap:.5rem;margin-bottom:1rem;overflow-x:auto">
+        <button class="section-filter active" onclick="filterSections('all',this)" style="padding:.5rem 1rem;border-radius:20px;border:1.5px solid var(--primary);background:rgba(46,125,50,.15);color:var(--primary);font-family:inherit;font-size:.8rem;font-weight:600;cursor:pointer;white-space:nowrap">Tous</button>
+        <button class="section-filter" onclick="filterSections('nettoyage',this)" style="padding:.5rem 1rem;border-radius:20px;border:1.5px solid rgba(255,255,255,.1);background:var(--bg3);color:var(--text-dim);font-family:inherit;font-size:.8rem;font-weight:600;cursor:pointer;white-space:nowrap">🧹 Nettoyage</button>
+        <button class="section-filter" onclick="filterSections('tremies',this)" style="padding:.5rem 1rem;border-radius:20px;border:1.5px solid rgba(255,255,255,.1);background:var(--bg3);color:var(--text-dim);font-family:inherit;font-size:.8rem;font-weight:600;cursor:pointer;white-space:nowrap">🪣 Trémies</button>
+        <button class="section-filter" onclick="filterSections('production',this)" style="padding:.5rem 1rem;border-radius:20px;border:1.5px solid rgba(255,255,255,.1);background:var(--bg3);color:var(--text-dim);font-family:inherit;font-size:.8rem;font-weight:600;cursor:pointer;white-space:nowrap">🧱 Production</button>
+      </div>
+
+      <div id="sections-list"><div class="empty-state"><div class="empty-icon">📭</div><div>Aucun rapport reçu.</div></div></div>
     </div>
 
     <div id="mgr-objectifs" class="tab-content content">
@@ -976,12 +1050,76 @@ function switchTechTab(tab,el){
   }
 }
 
+var currentSectionFilter = 'all';
+
 function switchMgrTab(tab,el){
   document.querySelectorAll('#screen-manager .tab-content').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('#screen-manager .nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('mgr-'+tab).classList.add('active');
   if(el)el.classList.add('active');
   if(tab==='paie') loadPaieData();
+  if(tab==='sections') loadSectionsReports();
+}
+
+function filterSections(filter, el) {
+  currentSectionFilter = filter;
+  document.querySelectorAll('.section-filter').forEach(function(b) {
+    b.style.borderColor = 'rgba(255,255,255,.1)';
+    b.style.background = 'var(--bg3)';
+    b.style.color = 'var(--text-dim)';
+  });
+  el.style.borderColor = 'var(--primary)';
+  el.style.background = 'rgba(46,125,50,.15)';
+  el.style.color = 'var(--primary)';
+  loadSectionsReports();
+}
+
+function loadSectionsReports() {
+  if(!window.doLoadSectionReports) { setTimeout(loadSectionsReports, 300); return; }
+  window.doLoadSectionReports(function(reports) {
+    var filtered = currentSectionFilter === 'all' ? reports : reports.filter(function(r){ return r.section === currentSectionFilter; });
+    renderSectionsReports(filtered);
+  });
+}
+
+function renderSectionsReports(reports) {
+  var el = document.getElementById('sections-list');
+  if(!el) return;
+
+  if(reports.length === 0) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><div>Aucun rapport pour cette section.</div></div>';
+    return;
+  }
+
+  var icons = { nettoyage: '🧹', tremies: '🪣', production: '🧱' };
+  var colors = { nettoyage: 'var(--green)', tremies: '#8899dd', production: 'var(--primary)' };
+
+  el.innerHTML = reports.slice(0,30).map(function(r, i) {
+    var icon = icons[r.section] || '📋';
+    var color = colors[r.section] || 'var(--primary)';
+    var details = '';
+
+    if(r.section === 'nettoyage') {
+      details = r.taches_faites+'/'+r.taches_total+' tâches · '+r.photos+' photo(s)';
+      if(r.anomalie) details += '<div style="color:var(--red);font-size:.75rem;margin-top:2px">⚠️ '+r.anomalie+'</div>';
+    } else if(r.section === 'tremies') {
+      details = 'T1:'+r.t1+'% T2:'+r.t2+'% T3:'+r.t3+'% · '+r.taches_faites+'/'+r.taches_total+' tâches';
+    } else if(r.section === 'production') {
+      details = r.blocs+' blocs · '+r.defects+' défectueux · '+r.photos+' photo(s)';
+      if(r.note) details += '<div style="color:var(--text-dim);font-size:.75rem;margin-top:2px">📝 '+r.note+'</div>';
+    }
+
+    return '<div class="day-report-card" style="margin-bottom:.5rem">' +
+      '<div style="padding:.85rem 1.25rem;display:flex;align-items:center;gap:.75rem">' +
+      '<div style="font-size:1.3rem">'+icon+'</div>' +
+      '<div style="flex:1">' +
+      '<div style="font-weight:600;font-size:.9rem">'+r.technicien_nom+' — '+r.section.charAt(0).toUpperCase()+r.section.slice(1)+'</div>' +
+      '<div style="font-size:.75rem;color:var(--text-dim)">'+r.date+' à '+r.time+'</div>' +
+      '<div style="font-size:.78rem;margin-top:3px">'+details+'</div>' +
+      '</div>' +
+      '<span class="badge" style="background:'+color+'22;color:'+color+';flex-shrink:0">✅</span>' +
+      '</div></div>';
+  }).join('');
 }
 
 // DATE/TIME
@@ -1027,6 +1165,25 @@ function setupManagerListener(){
     renderManagerData(rapports);
   },()=>{ document.getElementById('mgr-sync-status').innerHTML='<span class="offline-dot"></span>Hors ligne'; });
   unsubscribers.push(unsub);
+
+  // Listen for new section reports
+  let prevSectionCount = -1;
+  const {collection:col2, query:q2fn, orderBy:ob2, onSnapshot:ons2} = fs();
+  const qSec = q2fn(col2(db(), 'section_reports'), ob2('timestamp','desc'));
+  const unsubSec = ons2(qSec, snap => {
+    const reports = snap.docs.map(d=>({id:d.id,...d.data()}));
+    if(prevSectionCount >= 0 && reports.length > prevSectionCount) {
+      const r = reports[0];
+      const icons = {nettoyage:'🧹', tremies:'🪣', production:'🧱'};
+      showNotif((icons[r.section]||'📋')+' '+r.technicien_nom+' — '+r.section+' validé !');
+      if('Notification' in window && Notification.permission==='granted')
+        new Notification('SelfBéton — '+r.section+' validé', {body:r.technicien_nom+' a validé le '+r.section+' à '+r.time});
+    }
+    prevSectionCount = reports.length;
+    // Update overview activity
+    updateActivityFeed(reports);
+  });
+  unsubscribers.push(unsubSec);
 }
 
 function loadGoalsManager(){
@@ -1036,6 +1193,26 @@ function loadGoalsManager(){
 function loadConsignesManager(){
   const {doc,getDoc}=fs();
   getDoc(doc(db(),'config','consignes')).then(snap=>{ if(snap.exists()&&snap.data().text) document.getElementById('consignes-input').value=snap.data().text; });
+}
+
+function updateActivityFeed(sectionReports) {
+  var actEl = document.getElementById('mgr-activity');
+  if(!actEl) return;
+  if(sectionReports.length === 0) {
+    actEl.innerHTML = '<div style="color:var(--text-dim);font-size:.85rem;text-align:center;padding:1rem">Aucune activite</div>';
+    return;
+  }
+  var icons = {nettoyage:'🧹', tremies:'🪣', production:'🧱'};
+  actEl.innerHTML = sectionReports.slice(0,8).map(function(r) {
+    return '<div class="tech-row">' +
+      '<div style="font-size:1.2rem">'+(icons[r.section]||'📋')+'</div>' +
+      '<div style="flex:1">' +
+      '<div style="font-size:.85rem;font-weight:500">'+r.technicien_nom+' — '+r.section+' validé</div>' +
+      '<div style="font-size:.75rem;color:var(--text-dim)">'+r.date+' à '+r.time+'</div>' +
+      '</div>' +
+      '<span class="badge badge-green">✅</span>' +
+      '</div>';
+  }).join('');
 }
 
 function renderManagerData(rapports){
@@ -1173,7 +1350,63 @@ function delPhoto(section,i){ local.photos[section].splice(i,1); renderPhotos(se
 function totalPhotos(){ return local.photos.clean.length+local.photos.tremie.length+local.photos.prod.length; }
 
 // SECTION VALIDATION
-function saveSection(section){ local.validated[section]=true; showNotif('✅ Section validée !'); updateTechDashboard(); }
+function saveSection(section){
+  local.validated[section]=true;
+  showNotif('✅ ' + section.charAt(0).toUpperCase() + section.slice(1) + ' validé !');
+  updateTechDashboard();
+  // Send individual report to Firebase
+  sendSectionReport(section);
+}
+
+function sendSectionReport(section) {
+  if(!window.currentUser) return;
+  if(!window.doSaveSectionReport) { setTimeout(function(){ sendSectionReport(section); }, 300); return; }
+
+  var now = new Date();
+  var allChecks = document.querySelectorAll('#screen-tech .check-item');
+  var done = document.querySelectorAll('#screen-tech .check-item.checked').length;
+
+  var data = {
+    technicien: window.currentUser,
+    technicien_nom: window.TECHNICIENS[window.currentUser].nom,
+    section: section,
+    date: now.toLocaleDateString('fr-FR'),
+    time: now.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'}),
+    timestamp: Date.now()
+  };
+
+  if(section === 'nettoyage') {
+    var cleanChecks = document.querySelectorAll('#clean-list .check-item').length;
+    var cleanDone = document.querySelectorAll('#clean-list .check-item.checked').length;
+    var noteEl = document.getElementById('clean-note');
+    data.taches_total = cleanChecks;
+    data.taches_faites = cleanDone;
+    data.photos = local.photos.clean.length;
+    data.anomalie = noteEl ? noteEl.value : '';
+    data.photos_data = local.photos.clean;
+  } else if(section === 'tremies') {
+    var fillChecks = document.querySelectorAll('#fill-list .check-item').length;
+    var fillDone = document.querySelectorAll('#fill-list .check-item.checked').length;
+    data.taches_total = fillChecks;
+    data.taches_faites = fillDone;
+    data.t1 = local.tremies.t1;
+    data.t2 = local.tremies.t2;
+    data.t3 = local.tremies.t3;
+    data.photos = local.photos.tremie.length;
+    data.photos_data = local.photos.tremie;
+  } else if(section === 'production') {
+    var noteEl = document.getElementById('prod-note');
+    var mouleEl = document.getElementById('mould-type');
+    data.blocs = local.counters.blocs;
+    data.defects = local.counters.defects;
+    data.moule = mouleEl ? mouleEl.value : '';
+    data.photos = local.photos.prod.length;
+    data.photos_data = local.photos.prod;
+    data.note = noteEl ? noteEl.value : '';
+  }
+
+  window.doSaveSectionReport(data);
+}
 
 // DASHBOARD
 function updateTechDashboard(){
@@ -1438,6 +1671,101 @@ document.getElementById('login-user')?.addEventListener('keydown',e=>{if(e.key==
 // ═══════════ HEURES / POINTAGE ═══════════
 var typeJournee = 'travail';
 var currentSemaine = 0;
+var heuresDateOffset = 0; // 0 = aujourd'hui, -1 = hier, etc.
+var heuresExistingId = null; // ID du document Firebase si déjà enregistré
+
+function getHeuresDate() {
+  var d = new Date();
+  d.setDate(d.getDate() + heuresDateOffset);
+  return d;
+}
+
+function getHeuresDateStr() {
+  return getHeuresDate().toLocaleDateString('fr-FR');
+}
+
+window.changeHeuresDate = function(delta) {
+  // Don't go to future
+  if(delta > 0 && heuresDateOffset >= 0) return;
+  heuresDateOffset += delta;
+  updateHeuresDateDisplay();
+  loadHeuresForDate();
+};
+
+function updateHeuresDateDisplay() {
+  var d = getHeuresDate();
+  var el = document.getElementById('heures-date');
+  var nextBtn = document.getElementById('heures-next-btn');
+  if(el) {
+    if(heuresDateOffset === 0) {
+      el.textContent = 'Aujourd'hui';
+    } else if(heuresDateOffset === -1) {
+      el.textContent = 'Hier';
+    } else {
+      el.textContent = d.toLocaleDateString('fr-FR', {weekday:'long', day:'numeric', month:'short'});
+    }
+  }
+  // Disable next button on today
+  if(nextBtn) nextBtn.style.opacity = heuresDateOffset >= 0 ? '0.3' : '1';
+}
+
+function loadHeuresForDate() {
+  if(!window.doLoadPointages) { setTimeout(loadHeuresForDate, 300); return; }
+  var dateStr = getHeuresDateStr();
+  heuresExistingId = null;
+
+  window.doLoadPointages(function(pointages) {
+    var entry = pointages.find(function(p) {
+      return p.technicien === window.currentUser && p.date === dateStr;
+    });
+    if(entry) {
+      heuresExistingId = entry.id;
+      // Fill form with existing data
+      typeJournee = entry.typeJournee || 'travail';
+      // Update type buttons
+      document.querySelectorAll('.type-btn').forEach(function(b) {
+        b.style.borderColor = 'rgba(255,255,255,.1)';
+        b.style.background = 'var(--bg3)';
+        b.style.color = 'var(--text-dim)';
+      });
+      var activeBtn = document.querySelector('.type-btn[data-type="'+typeJournee+'"]');
+      if(activeBtn) {
+        activeBtn.style.borderColor = 'var(--primary)';
+        activeBtn.style.background = 'rgba(46,125,50,.15)';
+        activeBtn.style.color = 'var(--primary)';
+      }
+      var pc = document.getElementById('pointage-card');
+      var cc = document.getElementById('calcul-heures-card');
+      if(pc) pc.style.display = typeJournee === 'travail' ? 'block' : 'none';
+      if(cc) cc.style.display = typeJournee === 'travail' ? 'block' : 'none';
+      // Set times
+      var fields = ['heure-arrivee','heure-debut-pause','heure-fin-pause','heure-depart'];
+      var vals = [entry.arrivee, entry.debutPause, entry.finPause, entry.depart];
+      fields.forEach(function(id, i) {
+        var el = document.getElementById(id);
+        if(el) el.value = vals[i] || '';
+      });
+      var noteEl = document.getElementById('heures-note');
+      if(noteEl) noteEl.value = entry.note || '';
+      window.calcHeures();
+      // Update save button
+      var btn = document.getElementById('save-heures-btn');
+      if(btn) btn.textContent = '✏️ MODIFIER LES HEURES';
+    } else {
+      heuresExistingId = null;
+      // Clear form
+      ['heure-arrivee','heure-debut-pause','heure-fin-pause','heure-depart'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if(el) el.value = '';
+      });
+      var noteEl = document.getElementById('heures-note');
+      if(noteEl) noteEl.value = '';
+      window.calcHeures();
+      var btn = document.getElementById('save-heures-btn');
+      if(btn) btn.textContent = '💾 ENREGISTRER MES HEURES';
+    }
+  });
+}
 
 // Make calcHeures available immediately for onchange handlers
 window.calcHeures = function() {
@@ -1586,7 +1914,13 @@ window.changeSemaine = function changeSemaine(delta) {
 }
 
 function loadPaieData() {
-  if(!window.doLoadPointages) { setTimeout(loadPaieData, 300); return; }
+  if(!window.doLoadPointages || !window.doLoadSignatures) { setTimeout(loadPaieData, 300); return; }
+  // Load signatures for current week
+  var semaine = getWeekNumber(new Date());
+  window.doLoadSignatures(function(sigs) {
+    var weekSig = sigs.find(function(s) { return s.semaine === semaine && s.technicien === 'francois'; });
+    window._semaineSignature = weekSig || null;
+  });
   var dates = getWeekDates(currentSemaine);
   var monday = dates.monday;
 
@@ -1662,6 +1996,90 @@ function renderPaieData(pointages, weekDates) {
 
   container.innerHTML = html || '<div style="color:var(--text-dim);font-size:.85rem;text-align:center;padding:2rem">Aucune donnée pour cette semaine</div>';
 }
+
+
+// ═══════════ SIGNATURE PAD ═══════════
+var sigCanvas, sigCtx, sigDrawing = false, sigHasMark = false;
+
+function initSignaturePad() {
+  sigCanvas = document.getElementById('signature-pad');
+  if(!sigCanvas) return;
+  sigCtx = sigCanvas.getContext('2d');
+  sigCtx.strokeStyle = '#1e3a5f';
+  sigCtx.lineWidth = 2.5;
+  sigCtx.lineCap = 'round';
+
+  function getPos(e) {
+    var rect = sigCanvas.getBoundingClientRect();
+    var scaleX = sigCanvas.width / rect.width;
+    var scaleY = sigCanvas.height / rect.height;
+    if(e.touches) {
+      return { x: (e.touches[0].clientX - rect.left) * scaleX, y: (e.touches[0].clientY - rect.top) * scaleY };
+    }
+    return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
+  }
+
+  function startDraw(e) { e.preventDefault(); sigDrawing = true; var p = getPos(e); sigCtx.beginPath(); sigCtx.moveTo(p.x, p.y); }
+  function draw(e) { e.preventDefault(); if(!sigDrawing) return; sigHasMark = true; var p = getPos(e); sigCtx.lineTo(p.x, p.y); sigCtx.stroke(); }
+  function stopDraw(e) { sigDrawing = false; }
+
+  sigCanvas.addEventListener('mousedown', startDraw);
+  sigCanvas.addEventListener('mousemove', draw);
+  sigCanvas.addEventListener('mouseup', stopDraw);
+  sigCanvas.addEventListener('touchstart', startDraw, {passive:false});
+  sigCanvas.addEventListener('touchmove', draw, {passive:false});
+  sigCanvas.addEventListener('touchend', stopDraw);
+}
+
+function clearSignature() {
+  if(!sigCtx) return;
+  sigCtx.clearRect(0, 0, sigCanvas.width, sigCanvas.height);
+  sigHasMark = false;
+}
+
+function checkVendredi() {
+  var block = document.getElementById('signature-block');
+  if(!block) return;
+  var day = new Date().getDay();
+  // Show on Friday (5) - or always show for testing, change to: day === 5
+  if(day === 5) {
+    // Check if already signed this week
+    var semaine = getWeekNumber(new Date());
+    var annee = new Date().getFullYear();
+    if(window._semaineSignature &&
+       window._semaineSignature.semaine === semaine &&
+       window._semaineSignature.annee === annee &&
+       window._semaineSignature.technicien === window.currentUser) {
+      block.innerHTML = '<div class="card" style="background:rgba(46,125,50,.1);border:1.5px solid var(--primary)"><div style="text-align:center;padding:1rem"><div style="font-size:1.5rem">✅</div><div style="font-weight:600;color:var(--primary);margin-top:.5rem">Semaine signee</div><img src="'+window._semaineSignature.signature+'" style="max-width:150px;margin-top:.75rem;border-radius:6px"></div></div>';
+    } else {
+      block.style.display = 'block';
+      setTimeout(initSignaturePad, 100);
+    }
+  }
+}
+
+window.clearSignature = clearSignature;
+
+window.saveSignature = function() {
+  if(!sigHasMark) { window.showNotif('Signer avant de valider', 'error'); return; }
+  if(!window.currentUser) { window.showNotif('Non connecte', 'error'); return; }
+  if(!window.doSaveSignature) { setTimeout(window.saveSignature, 300); return; }
+
+  var dataURL = sigCanvas.toDataURL('image/png');
+  var now = new Date();
+  var data = {
+    technicien: window.currentUser,
+    technicien_nom: window.TECHNICIENS[window.currentUser].nom,
+    semaine: getWeekNumber(now),
+    annee: now.getFullYear(),
+    date: now.toLocaleDateString('fr-FR'),
+    time: now.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'}),
+    signature: dataURL,
+    timestamp: Date.now()
+  };
+
+  window.doSaveSignature(data);
+};
 
 // Init time inputs listeners
 document.addEventListener('DOMContentLoaded', function() {
