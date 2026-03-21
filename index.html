@@ -26,7 +26,7 @@ window._db = db;
 window._fs = { collection, addDoc, onSnapshot, query, orderBy, where, doc, setDoc, getDoc, serverTimestamp };
 window._fbReady = true;
 
-// ═══ SAUVEGARDE HEURES (dans module Firebase pour accès direct) ═══
+// === SAUVEGARDE HEURES (dans module Firebase pour accès direct) ===
 window.doSaveHeures = async function(data) {
   try {
     const existingId = data.existingId;
@@ -86,6 +86,46 @@ window.doLoadSignatures = function(callback) {
   const q = query(collection(db, 'signatures'), orderBy('timestamp', 'desc'));
   return onSnapshot(q, snap => {
     callback(snap.docs.map(d => ({id: d.id, ...d.data()})));
+  });
+};
+
+// ═══ REALTIME DATABASE (donnees Pi) ═══
+import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+const rtdb = getDatabase(app);
+
+window.doPushToken = function(token) {
+  const tokenRef = ref(rtdb, 'config/bearer_token');
+  set(tokenRef, { token: token, updated: Date.now() });
+};
+
+window.doListenPiData = function(callback) {
+  const statsRef = ref(rtdb, 'commandes_stats');
+  onValue(statsRef, (snapshot) => {
+    const data = snapshot.val();
+    if(data) callback('stats', data);
+  });
+  const ordersRef = ref(rtdb, 'dernieres_commandes');
+  onValue(ordersRef, (snapshot) => {
+    const data = snapshot.val();
+    if(data) callback('orders', Array.isArray(data) ? data : Object.values(data));
+  });
+  const notifRef = ref(rtdb, 'notifications');
+  onValue(notifRef, (snapshot) => {
+    const data = snapshot.val();
+    if(data) {
+      // Get latest unread notification
+      const notifs = Object.values(data);
+      const unread = notifs.filter(n => !n.lu).sort((a,b) => b.timestamp - a.timestamp);
+      if(unread.length > 0) {
+        const n = unread[0];
+        window.showNotif('Nouvelle commande ! ' + n.client + ' - ' + n.volume + ' m3');
+        if('Notification' in window && Notification.permission === 'granted') {
+          new Notification('SelfBeton - Nouvelle commande !', {
+            body: n.client + ' - ' + n.produit + ' - ' + n.volume + ' m3'
+          });
+        }
+      }
+    }
   });
 };
 
@@ -276,7 +316,6 @@ window.LOGO_B64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/4QBmRXhpZg
   <div class="bottom-nav">
     <div class="nav-item active" onclick="switchTechTab('dashboard',this)"><span class="nav-icon">🏠</span><span>Accueil</span></div>
     <div class="nav-item" onclick="switchTechTab('nettoyage',this)"><span class="nav-icon">🧹</span><span>Nettoyage</span></div>
-    <div class="nav-item" onclick="switchTechTab('tremies',this)"><span class="nav-icon">🪣</span><span>Trémies</span></div>
     <div class="nav-item" onclick="switchTechTab('production',this)"><span class="nav-icon">🧱</span><span>Production</span></div>
     <div class="nav-item" onclick="switchTechTab('heures',this)"><span class="nav-icon">⏰</span><span>Heures</span></div>
     <div class="nav-item" onclick="switchTechTab('rapport',this)"><span class="nav-icon">📋</span><span>Rapport</span></div>
@@ -322,56 +361,84 @@ window.LOGO_B64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/4QBmRXhpZg
         </ul>
       </div>
       <div class="card">
-        <div class="card-title"><span class="dot" style="background:var(--yellow)"></span>Photos nettoyage</div>
-        <p style="font-size:.82rem;color:var(--text-dim);margin-bottom:.5rem">Photos avant/après chaque zone.</p>
-        <div class="photo-zone" onclick="document.getElementById('clean-photo-input').click()"><div class="photo-zone-icon">📷</div><div class="photo-zone-text">Appuyer pour photographier</div></div>
-        <input type="file" accept="image/*" capture="environment" id="clean-photo-input" class="file-input-hidden" onchange="addPhoto('clean',this)">
-        <div class="photos-grid" id="clean-photos"></div>
+        <div class="card-title"><span class="dot" style="background:var(--yellow)"></span>Photos obligatoires</div>
+        <p style="font-size:.82rem;color:var(--text-dim);margin-bottom:.75rem">2 photos requises pour valider.</p>
+
+        <!-- Photo 1 : Malaxeur -->
+        <div style="margin-bottom:1rem">
+          <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem">
+            <span id="photo-malaxeur-check" style="font-size:1.1rem">⬜</span>
+            <span style="font-size:.88rem;font-weight:600">Photo du malaxeur</span>
+            <span class="badge badge-red" id="photo-malaxeur-badge" style="font-size:.7rem">Requise</span>
+          </div>
+          <div class="photo-zone" id="photo-malaxeur-zone" onclick="document.getElementById('photo-malaxeur-input').click()" style="padding:1rem">
+            <div class="photo-zone-icon" style="font-size:1.5rem">📷</div>
+            <div class="photo-zone-text">Photographier le malaxeur</div>
+          </div>
+          <input type="file" accept="image/*" capture="environment" id="photo-malaxeur-input" class="file-input-hidden" onchange="addMandatoryPhoto('malaxeur',this)">
+          <div id="photo-malaxeur-preview" style="margin-top:.5rem"></div>
+        </div>
+
+        <!-- Photo 2 : Trappe -->
+        <div>
+          <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem">
+            <span id="photo-trappe-check" style="font-size:1.1rem">⬜</span>
+            <span style="font-size:.88rem;font-weight:600">Photo de la trappe</span>
+            <span class="badge badge-red" id="photo-trappe-badge" style="font-size:.7rem">Requise</span>
+          </div>
+          <div class="photo-zone" id="photo-trappe-zone" onclick="document.getElementById('photo-trappe-input').click()" style="padding:1rem">
+            <div class="photo-zone-icon" style="font-size:1.5rem">📷</div>
+            <div class="photo-zone-text">Photographier la trappe</div>
+          </div>
+          <input type="file" accept="image/*" capture="environment" id="photo-trappe-input" class="file-input-hidden" onchange="addMandatoryPhoto('trappe',this)">
+          <div id="photo-trappe-preview" style="margin-top:.5rem"></div>
+        </div>
       </div>
       <div class="card">
         <div class="card-title"><span class="dot"></span>Anomalie / Observation</div>
         <textarea class="form-textarea" id="clean-note" placeholder="Signaler un problème..."></textarea>
       </div>
-      <div><button class="submit-btn" style="margin:0 1.25rem 1rem;width:calc(100% - 2.5rem)" onclick="saveSection('nettoyage')">✅ VALIDER LE NETTOYAGE</button></div>
-    </div>
 
-    <div id="tech-tremies" class="tab-content content">
-      <div class="card">
-        <div class="card-title"><span class="dot" style="background:#8899dd"></span>Niveaux des Trémies</div>
+      <!-- TREMIES INTEGREES -->
+      <div class="card" style="border-top:2px solid var(--primary);margin-top:.5rem">
+        <div class="card-title"><span class="dot" style="background:#8899dd"></span>Niveaux des Tremies</div>
         <p style="font-size:.82rem;color:var(--text-dim);margin-bottom:1rem">Remplir si niveau &lt; 25%.</p>
         <div style="margin-bottom:1.25rem;padding-bottom:1.25rem;border-bottom:1px solid rgba(255,255,255,.06)">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem"><strong>🪣 Trémie 1 — Sable</strong><span class="badge badge-green" id="t1-status">OK</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem"><strong>🪣 Tremie 1 - Sable</strong><span class="badge badge-green" id="t1-status">OK</span></div>
           <input type="range" min="0" max="100" value="60" style="width:100%;accent-color:var(--primary);margin-bottom:.4rem" oninput="updateTremie(1,this.value)">
           <div style="display:flex;justify-content:space-between;font-size:.78rem;color:var(--text-dim)"><span>Vide</span><span id="t1-val" style="color:var(--primary);font-weight:600">60%</span><span>Plein</span></div>
         </div>
         <div style="margin-bottom:1.25rem;padding-bottom:1.25rem;border-bottom:1px solid rgba(255,255,255,.06)">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem"><strong>🪣 Trémie 2 — Gravier</strong><span class="badge badge-orange" id="t2-status">À vérifier</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem"><strong>🪣 Tremie 2 - Gravillon</strong><span class="badge badge-orange" id="t2-status">A verifier</span></div>
           <input type="range" min="0" max="100" value="30" style="width:100%;accent-color:var(--primary);margin-bottom:.4rem" oninput="updateTremie(2,this.value)">
           <div style="display:flex;justify-content:space-between;font-size:.78rem;color:var(--text-dim)"><span>Vide</span><span id="t2-val" style="color:var(--primary);font-weight:600">30%</span><span>Plein</span></div>
         </div>
         <div>
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem"><strong>🪣 Trémie 3 — Ciment</strong><span class="badge badge-blue" id="t3-status">Rempli</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem"><strong>🪣 Tremie 3 - Ciment</strong><span class="badge badge-blue" id="t3-status">Rempli</span></div>
           <input type="range" min="0" max="100" value="85" style="width:100%;accent-color:var(--primary);margin-bottom:.4rem" oninput="updateTremie(3,this.value)">
           <div style="display:flex;justify-content:space-between;font-size:.78rem;color:var(--text-dim)"><span>Vide</span><span id="t3-val" style="color:var(--primary);font-weight:600">85%</span><span>Plein</span></div>
         </div>
       </div>
+
       <div class="card">
         <div class="card-title"><span class="dot" style="background:var(--yellow)"></span>Checklist Remplissage</div>
         <ul class="checklist" id="fill-list">
-          <li class="check-item" onclick="toggleCheck(this)"><div class="check-box"></div><div class="check-label">Vérification niveau Trémie 1 — Sable</div><span class="check-tag tag-fill">Trémie</span></li>
-          <li class="check-item" onclick="toggleCheck(this)"><div class="check-box"></div><div class="check-label">Vérification niveau Trémie 2 — Gravier</div><span class="check-tag tag-fill">Trémie</span></li>
-          <li class="check-item" onclick="toggleCheck(this)"><div class="check-box"></div><div class="check-label">Vérification niveau Trémie 3 — Ciment</div><span class="check-tag tag-fill">Trémie</span></li>
-          <li class="check-item" onclick="toggleCheck(this)"><div class="check-box"></div><div class="check-label">Remplissage effectué si nécessaire</div><span class="check-tag tag-fill">Trémie</span></li>
-          <li class="check-item" onclick="toggleCheck(this)"><div class="check-box"></div><div class="check-label">Fermeture et sécurisation des trappes</div><span class="check-tag tag-check">Contrôle</span></li>
+          <li class="check-item" onclick="toggleCheck(this)"><div class="check-box"></div><div class="check-label">Verification niveau Tremie 1 - Sable</div><span class="check-tag tag-fill">Tremie</span></li>
+          <li class="check-item" onclick="toggleCheck(this)"><div class="check-box"></div><div class="check-label">Verification niveau Tremie 2 - Gravillon</div><span class="check-tag tag-fill">Tremie</span></li>
+          <li class="check-item" onclick="toggleCheck(this)"><div class="check-box"></div><div class="check-label">Verification niveau Tremie 3 - Ciment</div><span class="check-tag tag-fill">Tremie</span></li>
+          <li class="check-item" onclick="toggleCheck(this)"><div class="check-box"></div><div class="check-label">Remplissage effectue si necessaire</div><span class="check-tag tag-fill">Tremie</span></li>
+          <li class="check-item" onclick="toggleCheck(this)"><div class="check-box"></div><div class="check-label">Fermeture et securisation des trappes</div><span class="check-tag tag-check">Controle</span></li>
         </ul>
       </div>
+
       <div class="card">
-        <div class="card-title"><span class="dot"></span>Photos trémies</div>
+        <div class="card-title"><span class="dot"></span>Photos tremies</div>
         <div class="photo-zone" onclick="document.getElementById('tremie-photo-input').click()"><div class="photo-zone-icon">📷</div><div class="photo-zone-text">Photographier les jauges</div></div>
         <input type="file" accept="image/*" capture="environment" id="tremie-photo-input" class="file-input-hidden" onchange="addPhoto('tremie',this)">
         <div class="photos-grid" id="tremie-photos"></div>
       </div>
-      <div><button class="submit-btn" style="margin:0 1.25rem 1rem;width:calc(100% - 2.5rem)" onclick="saveSection('tremies')">✅ VALIDER LES TRÉMIES</button></div>
+
+      <div><button class="submit-btn" style="margin:0 1.25rem 1rem;width:calc(100% - 2.5rem)" onclick="saveSectionNettoyageTremies()">✅ VALIDER NETTOYAGE & TREMIES</button></div>
     </div>
 
     <div id="tech-production" class="tab-content content">
@@ -1019,23 +1086,26 @@ function onUserChange(sel){
 function doLogin(){
   const user = document.getElementById('login-user').value.trim();
   const pin = document.getElementById('login-pin').value.trim();
-  if(!user){ showNotif('Sélectionner un utilisateur ❌','error'); return; }
-  if(!pin){ showNotif('Entrer votre code ❌','error'); return; }
+  if(!user){ showNotif('Sélectionner un utilisateur X','error'); return; }
+  if(!pin){ showNotif('Entrer votre code X','error'); return; }
   if(TECHNICIENS[user] && TECHNICIENS[user].pin===pin){
     currentUser=user; currentRole='technicien'; window.currentUser=user; window.currentRole='technicien';
+    localStorage.setItem('sb_session', JSON.stringify({user:user, role:'technicien', ts:Date.now()}));
     document.getElementById('tech-name').textContent=TECHNICIENS[user].nom;
     document.getElementById('tech-avatar').textContent=TECHNICIENS[user].nom.charAt(0);
     document.getElementById('tech-avatar').style.background=`linear-gradient(135deg,#2d3561,${TECHNICIENS[user].color})`;
     showScreen('tech'); updateTechDashboard();
     waitForFirebase(()=>{ listenConsignesAndGoals(); setTimeout(checkHeuresRappel, 2000); });
   } else if(user==='gerant' && pin==='0000'){
-    currentRole='gerant'; window.currentRole='gerant'; showScreen('manager');
+    currentRole='gerant'; window.currentRole='gerant';
+    localStorage.setItem('sb_session', JSON.stringify({user:'gerant', role:'gerant', ts:Date.now()}));
+    showScreen('manager');
     waitForFirebase(()=>{ setupManagerListener(); loadGoalsManager(); loadConsignesManager(); });
     startOrdersPolling();
-  } else { showNotif('Code incorrect ❌','error'); }
+  } else { showNotif('Code incorrect X','error'); }
 }
 
-function logout(){ unsubscribers.forEach(u=>u()); unsubscribers=[]; if(ordersInterval){clearInterval(ordersInterval);ordersInterval=null;} currentUser=null; currentRole=null; document.getElementById('login-user').value=''; document.getElementById('login-pin').value=''; showScreen('login'); }
+function logout(){ unsubscribers.forEach(u=>u()); unsubscribers=[]; if(ordersInterval){clearInterval(ordersInterval);ordersInterval=null;} currentUser=null; currentRole=null; window.currentUser=null; window.currentRole=null; localStorage.removeItem('sb_session'); document.getElementById('login-user').value=''; document.getElementById('login-pin').value=''; showScreen('login'); }
 
 // SCREENS
 function showScreen(name){ document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active')); document.getElementById('screen-'+name).classList.add('active'); }
@@ -1092,37 +1162,37 @@ function renderSectionsReports(reports) {
   if(!el) return;
 
   if(reports.length === 0) {
-    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><div>Aucun rapport pour cette section.</div></div>';
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon"></div><div>Aucun rapport pour cette section.</div></div>';
     return;
   }
 
-  var icons = { nettoyage: '🧹', tremies: '🪣', production: '🧱' };
+  var icons = { nettoyage: '', tremies: '', production: '' };
   var colors = { nettoyage: 'var(--green)', tremies: '#8899dd', production: 'var(--primary)' };
 
   el.innerHTML = reports.slice(0,30).map(function(r, i) {
-    var icon = icons[r.section] || '📋';
+    var icon = icons[r.section] || '';
     var color = colors[r.section] || 'var(--primary)';
     var details = '';
 
     if(r.section === 'nettoyage') {
-      details = r.taches_faites+'/'+r.taches_total+' tâches · '+r.photos+' photo(s)';
-      if(r.anomalie) details += '<div style="color:var(--red);font-size:.75rem;margin-top:2px">⚠️ '+r.anomalie+'</div>';
+      details = r.taches_faites+'/'+r.taches_total+' tâches . '+r.photos+' photo(s)';
+      if(r.anomalie) details += '<div style="color:var(--red);font-size:.75rem;margin-top:2px"> '+r.anomalie+'</div>';
     } else if(r.section === 'tremies') {
-      details = 'T1:'+r.t1+'% T2:'+r.t2+'% T3:'+r.t3+'% · '+r.taches_faites+'/'+r.taches_total+' tâches';
+      details = 'T1:'+r.t1+'% T2:'+r.t2+'% T3:'+r.t3+'% . '+r.taches_faites+'/'+r.taches_total+' tâches';
     } else if(r.section === 'production') {
-      details = r.blocs+' blocs · '+r.defects+' défectueux · '+r.photos+' photo(s)';
-      if(r.note) details += '<div style="color:var(--text-dim);font-size:.75rem;margin-top:2px">📝 '+r.note+'</div>';
+      details = r.blocs+' blocs . '+r.defects+' défectueux . '+r.photos+' photo(s)';
+      if(r.note) details += '<div style="color:var(--text-dim);font-size:.75rem;margin-top:2px"> '+r.note+'</div>';
     }
 
     return '<div class="day-report-card" style="margin-bottom:.5rem">' +
       '<div style="padding:.85rem 1.25rem;display:flex;align-items:center;gap:.75rem">' +
       '<div style="font-size:1.3rem">'+icon+'</div>' +
       '<div style="flex:1">' +
-      '<div style="font-weight:600;font-size:.9rem">'+r.technicien_nom+' — '+r.section.charAt(0).toUpperCase()+r.section.slice(1)+'</div>' +
+      '<div style="font-weight:600;font-size:.9rem">'+r.technicien_nom+' - '+r.section.charAt(0).toUpperCase()+r.section.slice(1)+'</div>' +
       '<div style="font-size:.75rem;color:var(--text-dim)">'+r.date+' à '+r.time+'</div>' +
       '<div style="font-size:.78rem;margin-top:3px">'+details+'</div>' +
       '</div>' +
-      '<span class="badge" style="background:'+color+'22;color:'+color+';flex-shrink:0">✅</span>' +
+      '<span class="badge" style="background:'+color+'22;color:'+color+';flex-shrink:0">OK</span>' +
       '</div></div>';
   }).join('');
 }
@@ -1133,7 +1203,7 @@ function formatTime(){ return new Date().toLocaleTimeString('fr-FR',{hour:'2-dig
 setInterval(()=>{
   const t=document.getElementById('time-display'),m=document.getElementById('mgr-date-sub');
   if(t)t.textContent=formatTime();
-  if(m)m.textContent=formatDate()+' — '+formatTime();
+  if(m)m.textContent=formatDate()+' - '+formatTime();
 },1000);
 
 // FIREBASE TECH
@@ -1155,16 +1225,16 @@ function listenConsignesAndGoals(){
 function setupManagerListener(){
   if('Notification' in window && Notification.permission==='default') Notification.requestPermission();
   const {collection,query,orderBy,onSnapshot}=fs();
-  document.getElementById('mgr-sync-status').innerHTML='<span class="online-dot"></span>En direct 🔴';
+  document.getElementById('mgr-sync-status').innerHTML='<span class="online-dot"></span>En direct ';
   let prevCount=-1;
   const q=query(collection(db(),'rapports'),orderBy('timestamp','desc'));
   const unsub=onSnapshot(q,snap=>{
     const rapports=snap.docs.map(d=>({id:d.id,...d.data()}));
     if(prevCount>=0 && rapports.length>prevCount){
       const n=rapports[0];
-      showNotif(`📨 Nouveau rapport de ${n.technicien_nom} !`);
+      showNotif(` Nouveau rapport de ${n.technicien_nom} !`);
       if('Notification' in window && Notification.permission==='granted')
-        new Notification('SelfBéton',{body:`Rapport de ${n.technicien_nom} — ${n.blocs} blocs, ${n.checks_pct}%`});
+        new Notification('SelfBéton',{body:`Rapport de ${n.technicien_nom} - ${n.blocs} blocs, ${n.checks_pct}%`});
     }
     prevCount=rapports.length;
     renderManagerData(rapports);
@@ -1179,10 +1249,10 @@ function setupManagerListener(){
     const reports = snap.docs.map(d=>({id:d.id,...d.data()}));
     if(prevSectionCount >= 0 && reports.length > prevSectionCount) {
       const r = reports[0];
-      const icons = {nettoyage:'🧹', tremies:'🪣', production:'🧱'};
-      showNotif((icons[r.section]||'📋')+' '+r.technicien_nom+' — '+r.section+' validé !');
+      const icons = {nettoyage:'', tremies:'', production:''};
+      showNotif(r.technicien_nom+' - '+r.section+' valide !');
       if('Notification' in window && Notification.permission==='granted')
-        new Notification('SelfBéton — '+r.section+' validé', {body:r.technicien_nom+' a validé le '+r.section+' à '+r.time});
+        new Notification('SelfBéton - '+r.section+' validé', {body:r.technicien_nom+' a validé le '+r.section+' à '+r.time});
     }
     prevSectionCount = reports.length;
     // Update overview activity
@@ -1207,15 +1277,15 @@ function updateActivityFeed(sectionReports) {
     actEl.innerHTML = '<div style="color:var(--text-dim);font-size:.85rem;text-align:center;padding:1rem">Aucune activite</div>';
     return;
   }
-  var icons = {nettoyage:'🧹', tremies:'🪣', production:'🧱'};
+  var icons = {nettoyage:'', tremies:'', production:''};
   actEl.innerHTML = sectionReports.slice(0,8).map(function(r) {
     return '<div class="tech-row">' +
-      '<div style="font-size:1.2rem">'+(icons[r.section]||'📋')+'</div>' +
+      '<div style="font-size:1.2rem">'+(icons[r.section]||'')+'</div>' +
       '<div style="flex:1">' +
-      '<div style="font-size:.85rem;font-weight:500">'+r.technicien_nom+' — '+r.section+' validé</div>' +
+      '<div style="font-size:.85rem;font-weight:500">'+r.technicien_nom+' - '+r.section+' validé</div>' +
       '<div style="font-size:.75rem;color:var(--text-dim)">'+r.date+' à '+r.time+'</div>' +
       '</div>' +
-      '<span class="badge badge-green">✅</span>' +
+      '<span class="badge badge-green">OK</span>' +
       '</div>';
   }).join('');
 }
@@ -1234,49 +1304,49 @@ function renderManagerData(rapports){
       <div class="tech-avatar-sm" style="background:linear-gradient(135deg,#2d3561,${info.color})">${info.nom.charAt(0)}</div>
       <div style="flex:1"><div style="font-weight:600;font-size:.9rem">${info.nom}</div>
       <div style="font-size:.75rem;color:var(--text-dim)">${r?`Dernier rapport : ${r.date} à ${r.time}`:'Aucun rapport'}</div></div>
-      <span class="badge ${hasToday?'badge-green':r?'badge-orange':'badge-red'}">${hasToday?"✅ Aujourd'hui":r?'⏳ '+r.date:'❌ Absent'}</span>
+      <span class="badge ${hasToday?'badge-green':r?'badge-orange':'badge-red'}">${hasToday?'Aujourd hui':r?r.date:'Absent'}</span>
     </div>`;
   }).join('');
 
   // Activity
   const actEl=document.getElementById('mgr-activity');
   actEl.innerHTML=rapports.length===0?'<div style="color:var(--text-dim);font-size:.85rem;text-align:center;padding:1rem">Aucune activité</div>':
-    rapports.slice(0,8).map(r=>`<div class="tech-row"><div style="font-size:1.2rem">📋</div>
-      <div style="flex:1"><div style="font-size:.85rem;font-weight:500">${r.technicien_nom||r.technicien} — Rapport soumis</div>
-      <div style="font-size:.75rem;color:var(--text-dim)">${r.date} à ${r.time} · ${r.blocs} blocs · ${r.checks_pct}%</div></div>
+    rapports.slice(0,8).map(r=>`<div class="tech-row"><div style="font-size:1.2rem"></div>
+      <div style="flex:1"><div style="font-size:.85rem;font-weight:500">${r.technicien_nom||r.technicien} - Rapport soumis</div>
+      <div style="font-size:.75rem;color:var(--text-dim)">${r.date} à ${r.time} . ${r.blocs} blocs . ${r.checks_pct}%</div></div>
       <span class="badge ${r.checks_pct>=80?'badge-green':r.checks_pct>=50?'badge-orange':'badge-red'}">${r.checks_pct}%</span></div>`).join('');
 
   // Rapports list
   document.getElementById('rapports-list').innerHTML=rapports.length===0?
-    '<div class="empty-state"><div class="empty-icon">📭</div><div>Aucun rapport reçu.</div></div>':
+    '<div class="empty-state"><div class="empty-icon"></div><div>Aucun rapport reçu.</div></div>':
     rapports.map((r,i)=>`<div class="day-report-card ${i===0?'new-report':''}">
       <div class="day-report-header" onclick="document.getElementById('rep-${i}').classList.toggle('open')">
-        <div><div class="day-report-date">${r.technicien_nom||r.technicien} — ${r.date}</div>
-        <div style="font-size:.78rem;color:var(--text-dim);margin-top:2px">${r.time} · ${r.blocs} blocs · ${r.photos} photos</div></div>
+        <div><div class="day-report-date">${r.technicien_nom||r.technicien} - ${r.date}</div>
+        <div style="font-size:.78rem;color:var(--text-dim);margin-top:2px">${r.time} . ${r.blocs} blocs . ${r.photos} photos</div></div>
         <span class="badge ${r.checks_pct>=80?'badge-green':r.checks_pct>=50?'badge-orange':'badge-red'}">${r.checks_pct}%</span>
       </div>
       <div class="day-report-body" id="rep-${i}">
-        <div class="rapport-block"><div class="rapport-title">Production</div><div>${r.blocs} blocs · ${r.defects} défectueux · ${r.moule||'—'}</div></div>
-        <div class="rapport-block"><div class="rapport-title">Nettoyage</div><div>${r.valid_nettoyage?'✅ Validé':'❌ Non validé'}</div></div>
-        <div class="rapport-block"><div class="rapport-title">Trémies</div><div>T1: ${r.t1}% · T2: ${r.t2}% · T3: ${r.t3}%</div></div>
+        <div class="rapport-block"><div class="rapport-title">Production</div><div>${r.blocs} blocs . ${r.defects} défectueux . ${r.moule||'-'}</div></div>
+        <div class="rapport-block"><div class="rapport-title">Nettoyage</div><div>${r.valid_nettoyage?'OK Validé':'X Non validé'}</div></div>
+        <div class="rapport-block"><div class="rapport-title">Trémies</div><div>T1: ${r.t1}% . T2: ${r.t2}% . T3: ${r.t3}%</div></div>
         <div class="rapport-block"><div class="rapport-title">Tâches</div><div>${r.checks_done}/${r.checks_total} effectuées</div></div>
         <div class="rapport-block"><div class="rapport-title">Photos</div><div>${r.photos} photo(s)</div></div>
         ${r.note?`<div class="rapport-block"><div class="rapport-title">Note</div><div>${r.note}</div></div>`:''}
-        ${r.clean_note?`<div class="alert-bar"><span style="font-size:1.3rem">⚠️</span><div><strong>Anomalie signalée</strong><br>${r.clean_note}</div></div>`:''}
+        ${r.clean_note?`<div class="alert-bar"><span style="font-size:1.3rem"></span><div><strong>Anomalie signalée</strong><br>${r.clean_note}</div></div>`:''}
       </div></div>`).join('');
 
   // Alertes
   const alertes=rapports.filter(r=>r.clean_note||r.t1<25||r.t2<25||r.t3<25||r.defects>5);
-  document.getElementById('alertes-icon').textContent=alertes.length>0?'🔴':'🔔';
+  document.getElementById('alertes-icon').textContent=alertes.length>0?'':'';
   document.getElementById('alertes-list').innerHTML=alertes.length===0?
-    '<div class="empty-state"><div class="empty-icon">🟢</div><div>Aucune alerte active.</div></div>':
+    '<div class="empty-state"><div class="empty-icon"></div><div>Aucune alerte active.</div></div>':
     alertes.map(r=>{
       let msgs=[];
-      if(r.clean_note)msgs.push({icon:'📝',title:`Anomalie — ${r.technicien_nom}`,msg:r.clean_note});
-      if(r.t1<25)msgs.push({icon:'⚠️',title:`Trémie 1 basse — ${r.technicien_nom}`,msg:`Niveau: ${r.t1}%`});
-      if(r.t2<25)msgs.push({icon:'⚠️',title:`Trémie 2 basse — ${r.technicien_nom}`,msg:`Niveau: ${r.t2}%`});
-      if(r.t3<25)msgs.push({icon:'⚠️',title:`Trémie 3 basse — ${r.technicien_nom}`,msg:`Niveau: ${r.t3}%`});
-      if(r.defects>5)msgs.push({icon:'🧱',title:`Beaucoup de rebuts — ${r.technicien_nom}`,msg:`${r.defects} blocs défectueux`});
+      if(r.clean_note)msgs.push({icon:'',title:`Anomalie - ${r.technicien_nom}`,msg:r.clean_note});
+      if(r.t1<25)msgs.push({icon:'',title:`Trémie 1 basse - ${r.technicien_nom}`,msg:`Niveau: ${r.t1}%`});
+      if(r.t2<25)msgs.push({icon:'',title:`Trémie 2 basse - ${r.technicien_nom}`,msg:`Niveau: ${r.t2}%`});
+      if(r.t3<25)msgs.push({icon:'',title:`Trémie 3 basse - ${r.technicien_nom}`,msg:`Niveau: ${r.t3}%`});
+      if(r.defects>5)msgs.push({icon:'',title:`Beaucoup de rebuts - ${r.technicien_nom}`,msg:`${r.defects} blocs défectueux`});
       return msgs.map(m=>`<div class="alert-bar"><span style="font-size:1.3rem">${m.icon}</span><div><strong>${m.title}</strong><br><span style="color:var(--text-dim)">${m.msg}</span><div style="font-size:.72rem;color:var(--text-dim);margin-top:4px">${r.date} à ${r.time}</div></div></div>`).join('');
     }).join('');
 }
@@ -1286,15 +1356,15 @@ function adjustGoal(key,delta){ goals[key]=Math.max(1,goals[key]+delta); documen
 function saveGoals(){
   const {doc,setDoc,serverTimestamp}=fs();
   setDoc(doc(db(),'config','goals'),{...goals,updated:serverTimestamp()})
-    .then(()=>showNotif('🎯 Objectifs sauvegardés !'))
-    .catch(()=>showNotif('Erreur ❌','error'));
+    .then(()=>showNotif(' Objectifs sauvegardés !'))
+    .catch(()=>showNotif('Erreur X','error'));
 }
 function saveConsignes(){
   const text=document.getElementById('consignes-input').value.trim();
   const {doc,setDoc,serverTimestamp}=fs();
   setDoc(doc(db(),'config','consignes'),{text,updated:serverTimestamp()})
-    .then(()=>showNotif('📢 Consignes publiées en temps réel !'))
-    .catch(()=>showNotif('Erreur ❌','error'));
+    .then(()=>showNotif(' Consignes publiées en temps réel !'))
+    .catch(()=>showNotif('Erreur X','error'));
 }
 
 // CHECKLIST
@@ -1318,7 +1388,7 @@ function updateTremie(n,val){
   local.tremies['t'+n]=parseInt(val);
   document.getElementById('t'+n+'-val').textContent=val+'%';
   const el=document.getElementById('t'+n+'-status');
-  if(val<25){el.className='badge badge-red';el.textContent='⚠ Bas';}
+  if(val<25){el.className='badge badge-red';el.textContent=' Bas';}
   else if(val<50){el.className='badge badge-orange';el.textContent='À vérifier';}
   else{el.className='badge badge-green';el.textContent='OK';}
 }
@@ -1336,7 +1406,7 @@ function addPhoto(section,input){
       canvas.width=w;canvas.height=h;
       canvas.getContext('2d').drawImage(img,0,0,w,h);
       local.photos[section].push(canvas.toDataURL('image/jpeg',.7));
-      renderPhotos(section); updateTechDashboard(); showNotif('📷 Photo ajoutée !');
+      renderPhotos(section); updateTechDashboard(); showNotif(' Photo ajoutée !');
     };
     img.src=e.target.result;
   };
@@ -1347,7 +1417,7 @@ function renderPhotos(section){
   grid.innerHTML='';
   local.photos[section].forEach((src,i)=>{
     const div=document.createElement('div'); div.className='photo-thumb';
-    div.innerHTML=`<img src="${src}" loading="lazy"><button class="del-btn" onclick="delPhoto('${section}',${i})">✕</button>`;
+    div.innerHTML=`<img src="${src}" loading="lazy"><button class="del-btn" onclick="delPhoto('${section}',${i})"></button>`;
     grid.appendChild(div);
   });
 }
@@ -1356,8 +1426,23 @@ function totalPhotos(){ return local.photos.clean.length+local.photos.tremie.len
 
 // SECTION VALIDATION
 function saveSection(section){
+  // Check mandatory photos for nettoyage
+  if(section === 'nettoyage') {
+    if(!mandatoryPhotos.malaxeur) {
+      showNotif('Photo du malaxeur requise X', 'error');
+      // Scroll to photo section
+      switchTechTab('nettoyage', null);
+      setTimeout(function(){ document.getElementById('photo-malaxeur-zone').scrollIntoView({behavior:'smooth'}); }, 100);
+      return;
+    }
+    if(!mandatoryPhotos.trappe) {
+      showNotif('Photo de la trappe requise X', 'error');
+      setTimeout(function(){ document.getElementById('photo-trappe-zone').scrollIntoView({behavior:'smooth'}); }, 100);
+      return;
+    }
+  }
   local.validated[section]=true;
-  showNotif('✅ ' + section.charAt(0).toUpperCase() + section.slice(1) + ' validé !');
+  showNotif('OK ' + section.charAt(0).toUpperCase() + section.slice(1) + ' validé !');
   updateTechDashboard();
   // Send individual report to Firebase
   sendSectionReport(section);
@@ -1383,12 +1468,19 @@ function sendSectionReport(section) {
   if(section === 'nettoyage') {
     var cleanChecks = document.querySelectorAll('#clean-list .check-item').length;
     var cleanDone = document.querySelectorAll('#clean-list .check-item.checked').length;
+    var fillChecks = document.querySelectorAll('#fill-list .check-item').length;
+    var fillDone = document.querySelectorAll('#fill-list .check-item.checked').length;
     var noteEl = document.getElementById('clean-note');
-    data.taches_total = cleanChecks;
-    data.taches_faites = cleanDone;
-    data.photos = local.photos.clean.length;
+    data.taches_total = cleanChecks + fillChecks;
+    data.taches_faites = cleanDone + fillDone;
+    data.photos = (mandatoryPhotos.malaxeur ? 1 : 0) + (mandatoryPhotos.trappe ? 1 : 0) + local.photos.clean.length + local.photos.tremie.length;
     data.anomalie = noteEl ? noteEl.value : '';
+    data.photo_malaxeur = mandatoryPhotos.malaxeur;
+    data.photo_trappe = mandatoryPhotos.trappe;
     data.photos_data = local.photos.clean;
+    data.t1 = local.tremies.t1;
+    data.t2 = local.tremies.t2;
+    data.t3 = local.tremies.t3;
   } else if(section === 'tremies') {
     var fillChecks = document.querySelectorAll('#fill-list .check-item').length;
     var fillDone = document.querySelectorAll('#fill-list .check-item.checked').length;
@@ -1420,13 +1512,13 @@ function updateTechDashboard(){
   const total=allChecks.length, pct=total>0?Math.round(done/total*100):0;
   const set=(id,val)=>{const el=document.getElementById(id);if(el)el.textContent=val;};
   set('date-display',formatDate()); set('progress-badge',pct+'%'); set('progress-pct',pct+'%');
-  set('stat-done',done); set('stat-total',total); set('stat-blocs',local.counters.blocs); set('stat-photos',totalPhotos());
+  set('stat-done',done); set('stat-total',total); set('stat-blocs',local.counters.blocs); set('stat-photos',totalPhotos() + (mandatoryPhotos.malaxeur?1:0) + (mandatoryPhotos.trappe?1:0));
   const pf=document.getElementById('progress-fill'); if(pf)pf.style.width=pct+'%';
   const nextList=document.getElementById('next-tasks-list');
   if(nextList){
     const unchecked=Array.from(document.querySelectorAll('#screen-tech .check-item:not(.checked)')).slice(0,3);
     nextList.innerHTML=unchecked.length===0?
-      '<div style="text-align:center;padding:1rem;color:var(--green)">🎉 Toutes les tâches complétées !</div>':
+      '<div style="text-align:center;padding:1rem;color:var(--green)"> Toutes les tâches complétées !</div>':
       unchecked.map(el=>`<div style="display:flex;align-items:center;gap:.6rem;padding:.6rem 0;border-bottom:1px solid rgba(255,255,255,.05)">
         <div style="width:8px;height:8px;border-radius:50%;background:var(--primary);flex-shrink:0"></div>
         <span style="font-size:.85rem;flex:1">${el.querySelector('.check-label').textContent}</span>
@@ -1443,16 +1535,16 @@ function updateRapportSummary(){
   const fl=document.querySelectorAll('#fill-list .check-item').length,fd=document.querySelectorAll('#fill-list .check-item.checked').length;
   const set=(id,val)=>{const el=document.getElementById(id);if(el)el.textContent=val;};
   set('rapport-date',formatDate());
-  set('rap-nettoyage',`${cd}/${cl} tâches · ${local.photos.clean.length} photo(s) · ${local.validated.nettoyage?'✅ Validé':'⏳ En cours'}`);
-  set('rap-tremies',`${fd}/${fl} tâches · T1:${local.tremies.t1}% T2:${local.tremies.t2}% T3:${local.tremies.t3}%`);
-  set('rap-production',`${local.counters.blocs} blocs · ${local.counters.defects} défectueux · ${local.validated.production?'✅ Validé':'⏳ En cours'}`);
+  set('rap-nettoyage',`${cd}/${cl} tâches . ${local.photos.clean.length} photo(s) . ${local.validated.nettoyage?'OK Validé':' En cours'}`);
+  set('rap-tremies',`${fd}/${fl} tâches . T1:${local.tremies.t1}% T2:${local.tremies.t2}% T3:${local.tremies.t3}%`);
+  set('rap-production',`${local.counters.blocs} blocs . ${local.counters.defects} défectueux . ${local.validated.production?'OK Validé':' En cours'}`);
   set('rap-photos',`${totalPhotos()} photo(s) au total`);
 }
 
 // SUBMIT RAPPORT
 function submitRapport(){
   const btn=document.getElementById('submit-rapport-btn'),statusEl=document.getElementById('rapport-sent-status');
-  btn.disabled=true; btn.textContent='⏳ Envoi en cours...';
+  btn.disabled=true; btn.textContent=' Envoi en cours...';
   const allChecks=document.querySelectorAll('#screen-tech .check-item').length;
   const done=document.querySelectorAll('#screen-tech .check-item.checked').length;
   const pct=allChecks>0?Math.round(done/allChecks*100):0;
@@ -1474,15 +1566,15 @@ function submitRapport(){
   const {collection,addDoc,serverTimestamp}=fs();
   addDoc(collection(db(),'rapports'),{...rapport,created:serverTimestamp()})
     .then(()=>{
-      showNotif('📨 Rapport envoyé en temps réel !');
-      btn.textContent='✅ RAPPORT ENVOYÉ'; btn.style.background='var(--green)';
-      statusEl.textContent='Envoyé à '+formatTime()+' — Gérant notifié.';
+      showNotif(' Rapport envoyé en temps réel !');
+      btn.textContent='OK RAPPORT ENVOYÉ'; btn.style.background='var(--green)';
+      statusEl.textContent='Envoyé à '+formatTime()+' - Gérant notifié.';
       document.getElementById('final-note').value='';
     })
-    .catch(err=>{ btn.disabled=false; btn.textContent='📨 ENVOYER AU GÉRANT'; showNotif('Erreur ❌ Vérifier connexion','error'); statusEl.textContent='Erreur: '+err.message; });
+    .catch(err=>{ btn.disabled=false; btn.textContent=' ENVOYER AU GÉRANT'; showNotif('Erreur X Vérifier connexion','error'); statusEl.textContent='Erreur: '+err.message; });
 }
 
-// ═══════════ COMMANDES API ═══════════
+// =========== COMMANDES API ===========
 const SHOP_ID = 339;
 const API_URL = '/.netlify/functions/orders';
 let bearerToken = 'eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiI1NTgiLCJkYXRhIjp7InVzZXJuYW1lIjoiZGFtaWVuLmd1ZXVnbm9uQGdtYWlsLmNvbSIsImVtYWlsIjoiZGFtaWVuLmd1ZXVnbm9uQGdtYWlsLmNvbSIsImZpcnN0TmFtZSI6IkRhbWllbiIsImxhc3ROYW1lIjoiR1VFVUdOT04iLCJyb2xlcyI6W3siaWQiOjEsInNob3BJZHMiOlszMzldLCJuYW1lIjoiUk9MRV9BRE1JTiIsImRlc2NyaXB0aW9uIjoiUm9sbGUgZWluZXMgQWRtaW5udXR6ZXJzIn1dfSwiYXV0aCI6IlJPTEVfQURNSU4iLCJ0eXBlIjoiVVNFUiIsImV4cCI6MTc3MzUzMDM4OH0.p5AjWXJbGvvmgZAn3POhaQPW3c8MnLUzmaj8U7ZUBbSKdQCkqoPn9gM_qD1cbchsFF290MGab6Oyw4rROHRYig';
@@ -1499,10 +1591,10 @@ function loadSavedToken(){
 
 function saveToken(){
   const val = document.getElementById('api-token-input').value.trim().replace('Bearer ','');
-  if(!val){ showNotif('Token vide ❌','error'); return; }
+  if(!val){ showNotif('Token vide X','error'); return; }
   bearerToken = val;
   localStorage.setItem('sb_bearer', val);
-  showNotif('🔑 Token sauvegardé !');
+  showNotif(' Token sauvegardé !');
   fetchOrders();
 }
 
@@ -1525,22 +1617,22 @@ async function fetchOrders(){
       const qty = getQty(o);
       const vol = (qty*0.05).toFixed(3);
       const produit = (o.orderItems||o.items||[{name:'béton'}])[0]?.name||'béton';
-      showNotif(`🛒 Nouvelle commande ! ${client} — ${vol} m³`);
+      showNotif(` Nouvelle commande ! ${client} - ${vol} m3`);
       if('Notification' in window && Notification.permission==='granted')
-        new Notification('SelfBéton — Nouvelle commande !',{body:`${client} · ${produit} · ${vol} m³`});
+        new Notification('SelfBéton - Nouvelle commande !',{body:`${client} . ${produit} . ${vol} m3`});
     }
     if(orders[0]?.id) lastOrderId = orders[0].id;
     allOrders = orders;
     renderOrders(orders);
   } catch(e){
-    renderOrdersError('Erreur réseau — vérifier token');
+    renderOrdersError('Erreur réseau - vérifier token');
   }
 }
 
 function handleTokenError(status){
   if(status===401||status===403){
-    renderOrdersError('⚠️ Token expiré — Reconnecte-toi sur beton2go et mets à jour le token dans l\'onglet Commandes');
-    showNotif('🔑 Token API expiré ❌','error');
+    renderOrdersError(' Token expiré - Reconnecte-toi sur beton2go et mets à jour le token dans l\'onglet Commandes');
+    showNotif(' Token API expiré X','error');
   } else {
     renderOrdersError('Erreur API ('+status+')');
   }
@@ -1549,7 +1641,7 @@ function handleTokenError(status){
 function renderOrdersError(msg){
   const els = ['cmd-mini-list','cmd-full-list'];
   els.forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML=`<div style="color:var(--red);font-size:.85rem;text-align:center;padding:1rem">${msg}</div>`; });
-  document.getElementById('cmd-live-dot').textContent = '— ' + msg;
+  document.getElementById('cmd-live-dot').textContent = '- ' + msg;
 }
 
 function getQty(o){
@@ -1563,7 +1655,7 @@ function getQty(o){
 
 function renderOrders(orders){
   const today = new Date().toLocaleDateString('fr-FR');
-  const VOLUME_FACTOR = 0.05; // 1 unité = 0.05 m³
+  const VOLUME_FACTOR = 0.05; // 1 unité = 0.05 m3
 
   const todayOrders = orders.filter(o=>{
     const d = new Date(o.orderDate||o.createdAt||o.date||0);
@@ -1574,23 +1666,23 @@ function renderOrders(orders){
   const volTotal = orders.reduce((s,o)=>s+getQty(o)*VOLUME_FACTOR,0);
   const caToday = todayOrders.reduce((s,o)=>s+parseFloat(o.totalPrice||o.total||0),0);
 
-  // Alerte si volume > 3m³
+  // Alerte si volume > 3m3
   if(volToday > 3){
-    showNotif(`⚠️ Volume du jour : ${volToday.toFixed(2)} m³ (> 3 m³ !)`);
+    showNotif(` Volume du jour : ${volToday.toFixed(2)} m3 (> 3 m3 !)`);
     if('Notification' in window && Notification.permission==='granted')
-      new Notification('SelfBéton — Volume élevé !',{body:`Volume du jour: ${volToday.toFixed(2)} m³`});
+      new Notification('SelfBéton - Volume élevé !',{body:`Volume du jour: ${volToday.toFixed(2)} m3`});
   }
 
   const set=(id,val)=>{const el=document.getElementById(id);if(el)el.textContent=val;};
   set('ov-cmd-today', todayOrders.length);
-  set('ov-ca-today', volToday.toFixed(2)+' m³');
+  set('ov-ca-today', volToday.toFixed(2)+' m3');
   set('cmd-count-today', todayOrders.length);
-  set('cmd-ca-today', volToday.toFixed(2)+' m³');
+  set('cmd-ca-today', volToday.toFixed(2)+' m3');
   set('cmd-count-total', orders.length);
-  set('cmd-ca-total', volTotal.toFixed(2)+' m³');
+  set('cmd-ca-total', volTotal.toFixed(2)+' m3');
   set('cmd-total-badge', orders.length+' commandes');
   set('cmd-last-update', 'Mis à jour à '+formatTime());
-  set('cmd-live-dot', '— mis à jour à '+formatTime());
+  set('cmd-live-dot', '- mis à jour à '+formatTime());
 
   // Mini list (overview)
   const miniEl = document.getElementById('cmd-mini-list');
@@ -1598,18 +1690,18 @@ function renderOrders(orders){
     miniEl.innerHTML = orders.slice(0,5).map(o=>{
       const client = o.billingAddress?.company || o.billingAddress?.lastName || o.customerName || 'Invité';
       const vol = (getQty(o)*VOLUME_FACTOR).toFixed(3);
-      const produit = (o.orderItems||o.items||[{name:'—'}])[0]?.name||'—';
+      const produit = (o.orderItems||o.items||[{name:'-'}])[0]?.name||'-';
       const dt = new Date(o.orderDate||o.createdAt||0);
       const heure = dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
       const dateStr = dt.toLocaleDateString('fr-FR');
       const isToday = dateStr===today;
       return `<div class="tech-row">
-        <div style="font-size:1.2rem">🛒</div>
+        <div style="font-size:1.2rem"></div>
         <div style="flex:1">
           <div style="font-size:.85rem;font-weight:500">${client}</div>
-          <div style="font-size:.75rem;color:var(--text-dim)">${produit} · ${isToday?'Aujourd\'hui':dateStr} à ${heure}</div>
+          <div style="font-size:.75rem;color:var(--text-dim)">${produit} . ${isToday?'Aujourd\'hui':dateStr} à ${heure}</div>
         </div>
-        <span class="badge ${isToday?'badge-green':'badge-blue'}">${vol} m³</span>
+        <span class="badge ${isToday?'badge-green':'badge-blue'}">${vol} m3</span>
       </div>`;
     }).join('');
   }
@@ -1620,22 +1712,22 @@ function renderOrders(orders){
     fullEl.innerHTML = orders.map(o=>{
       const client = o.billingAddress?.company || o.billingAddress?.lastName || o.customerName || 'Invité';
       const vol = (getQty(o)*VOLUME_FACTOR).toFixed(3);
-      const produit = (o.orderItems||o.items||[{name:'—'}])[0]?.name||'—';
+      const produit = (o.orderItems||o.items||[{name:'-'}])[0]?.name||'-';
       const dt = new Date(o.orderDate||o.createdAt||0);
       const heure = dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
       const dateStr = dt.toLocaleDateString('fr-FR');
       const isToday = dateStr===today;
-      const ref = o.reference||o.orderNumber||o.id||'—';
-      const paiement = o.paymentMethodName||o.paymentMethod||'—';
+      const ref = o.reference||o.orderNumber||o.id||'-';
+      const paiement = o.paymentMethodName||o.paymentMethod||'-';
       const ca = parseFloat(o.totalPrice||o.total||0).toFixed(2);
       return `<div class="tech-row">
         <div style="flex:1">
           <div style="font-size:.85rem;font-weight:600">${client}</div>
-          <div style="font-size:.75rem;color:var(--text-dim)">${produit} · ${ref} · ${isToday?'Aujourd\'hui':dateStr} ${heure} · ${paiement}</div>
+          <div style="font-size:.75rem;color:var(--text-dim)">${produit} . ${ref} . ${isToday?'Aujourd\'hui':dateStr} ${heure} . ${paiement}</div>
         </div>
         <div style="text-align:right;flex-shrink:0">
-          <span class="badge ${isToday?'badge-green':'badge-blue'}">${vol} m³</span>
-          <div style="font-size:.72rem;color:var(--text-dim);margin-top:2px">${ca}€</div>
+          <span class="badge ${isToday?'badge-green':'badge-blue'}">${vol} m3</span>
+          <div style="font-size:.72rem;color:var(--text-dim);margin-top:2px">${ca}</div>
         </div>
       </div>`;
     }).join('');
@@ -1660,6 +1752,36 @@ function showNotif(msg,type='success'){
 }
 
 // INIT
+// Auto-login from saved session (30 days)
+(function() {
+  try {
+    var saved = localStorage.getItem('sb_session');
+    if(!saved) return;
+    var session = JSON.parse(saved);
+    var THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
+    if(Date.now() - session.ts > THIRTY_DAYS) { localStorage.removeItem('sb_session'); return; }
+    if(session.role === 'technicien' && TECHNICIENS[session.user]) {
+      currentUser = session.user;
+      currentRole = 'technicien';
+      window.currentUser = session.user;
+      window.currentRole = 'technicien';
+      var info = TECHNICIENS[session.user];
+      document.getElementById('tech-name').textContent = info.nom;
+      document.getElementById('tech-avatar').textContent = info.nom.charAt(0);
+      document.getElementById('tech-avatar').style.background = 'linear-gradient(135deg,#2d3561,' + info.color + ')';
+      showScreen('tech');
+      updateTechDashboard();
+      waitForFirebase(function(){ listenConsignesAndGoals(); setTimeout(checkHeuresRappel, 2000); });
+    } else if(session.role === 'gerant') {
+      currentRole = 'gerant';
+      window.currentRole = 'gerant';
+      showScreen('manager');
+      waitForFirebase(function(){ setupManagerListener(); loadGoalsManager(); loadConsignesManager(); });
+      startOrdersPolling();
+    }
+  } catch(e) { localStorage.removeItem('sb_session'); }
+})();
+
 // Set logos
 if(window.LOGO_B64){
   ['logo-login','logo-topbar-tech','logo-topbar-mgr'].forEach(id=>{
@@ -1673,7 +1795,8 @@ document.getElementById('login-user')?.addEventListener('keydown',e=>{if(e.key==
 </script>
 
 <script>
-// ═══════════ HEURES / POINTAGE ═══════════
+
+// =========== HEURES / POINTAGE ===========
 var typeJournee = 'travail';
 var currentSemaine = 0;
 var heuresDateOffset = 0;
@@ -1704,7 +1827,7 @@ function updateHeuresDateDisplay() {
   var nextBtn = document.getElementById('heures-next-btn');
   if(el) {
     if(heuresDateOffset === 0) {
-      el.textContent = "Aujourd'hui";
+      el.textContent = 'Aujourd hui';
     } else if(heuresDateOffset === -1) {
       el.textContent = 'Hier';
     } else {
@@ -1756,7 +1879,7 @@ function loadHeuresForDate() {
       window.calcHeures();
       // Update save button
       var btn = document.getElementById('save-heures-btn');
-      if(btn) btn.textContent = '✏️ MODIFIER LES HEURES';
+      if(btn) btn.textContent = ' MODIFIER LES HEURES';
     } else {
       heuresExistingId = null;
       // Clear form
@@ -1768,7 +1891,7 @@ function loadHeuresForDate() {
       if(noteEl) noteEl.value = '';
       window.calcHeures();
       var btn = document.getElementById('save-heures-btn');
-      if(btn) btn.textContent = '💾 ENREGISTRER MES HEURES';
+      if(btn) btn.textContent = ' ENREGISTRER MES HEURES';
     }
   });
 }
@@ -1822,7 +1945,7 @@ window.setTypeJournee = function setTypeJournee(type, el) {
 }
 
 function toMin(t) { if(!t) return null; var p=t.split(':'); return parseInt(p[0])*60+parseInt(p[1]); }
-function toHHMM(m) { if(m===null||m===undefined||isNaN(m)) return '—'; var h=Math.floor(Math.abs(m)/60),mn=Math.abs(m)%60; return (m<0?'-':'')+(h+'h'+String(mn).padStart(2,'0')); }
+function toHHMM(m) { if(m===null||m===undefined||isNaN(m)) return '-'; var h=Math.floor(Math.abs(m)/60),mn=Math.abs(m)%60; return (m<0?'-':'')+(h+'h'+String(mn).padStart(2,'0')); }
 
 function calcHeures() {
   var arrivee = document.getElementById('heure-arrivee') ? document.getElementById('heure-arrivee').value : '';
@@ -1851,7 +1974,7 @@ function calcHeures() {
   if(ct) ct.textContent = toHHMM(travailMin);
   if(cp) cp.textContent = toHHMM(pauseMin > 0 ? pauseMin : null);
   if(ce) ce.textContent = toHHMM(effectifMin);
-  if(cs) cs.textContent = supMin !== null ? (supMin >= 0 ? '+'+toHHMM(supMin) : toHHMM(supMin)) : '—';
+  if(cs) cs.textContent = supMin !== null ? (supMin >= 0 ? '+'+toHHMM(supMin) : toHHMM(supMin)) : '-';
   if(badge && effectifMin !== null) badge.textContent = toHHMM(effectifMin);
 }
 
@@ -1865,7 +1988,7 @@ window.saveHeures = function saveHeures() {
   var depart = document.getElementById('heure-depart').value;
   var note = document.getElementById('heures-note').value;
 
-  if(typeJournee === 'travail' && !arrivee) { showNotif("Entrer l'heure d'arrivée ❌", 'error'); return; }
+  if(typeJournee === 'travail' && !arrivee) { showNotif("Entrer l'heure d'arrivée X", 'error'); return; }
 
   var aMin = toMin(arrivee), dMin = toMin(depart);
   var dpMin = toMin(debutPause), fpMin = toMin(finPause);
@@ -1892,8 +2015,8 @@ window.saveHeures = function saveHeures() {
   var fsObj = window._fs;
   var dbObj = window._db;
   fsObj.addDoc(fsObj.collection(dbObj, 'pointages'), pointage)
-    .then(function() { showNotif('⏰ Heures enregistrées !'); })
-    .catch(function() { showNotif('Erreur enregistrement ❌', 'error'); });
+    .then(function() { showNotif(' Heures enregistrées !'); })
+    .catch(function() { showNotif('Erreur enregistrement X', 'error'); });
 }
 
 function getWeekNumber(d) {
@@ -1965,7 +2088,7 @@ function renderPaieData(pointages, weekDates) {
 
     var jours = weekDates.slice(0,7).map(function(dateStr) {
       var p = techPointages.find(function(x) { return x.date === dateStr; });
-      if(!p) return { date: dateStr, label: '—', min: 0, type: 'absent' };
+      if(!p) return { date: dateStr, label: '-', min: 0, type: 'absent' };
       if(p.typeJournee !== 'travail') return { date: dateStr, label: p.typeJournee, min: 0, type: p.typeJournee };
       joursTravailes++;
       var m = p.effectifMin || 0;
@@ -1981,7 +2104,7 @@ function renderPaieData(pointages, weekDates) {
     html += '<div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem">';
     html += '<div class="tech-avatar-sm" style="background:linear-gradient(135deg,#1e3a5f,'+info.color+')">'+info.nom.charAt(0)+'</div>';
     html += '<div style="flex:1"><div style="font-weight:700;font-size:1rem">'+info.nom+'</div>';
-    html += '<div style="font-size:.75rem;color:var(--text-dim)">'+joursTravailes+' jour(s) · '+toHHMM(totalMin)+' / 35h</div></div>';
+    html += '<div style="font-size:.75rem;color:var(--text-dim)">'+joursTravailes+' jour(s) . '+toHHMM(totalMin)+' / 35h</div></div>';
     html += '<span class="badge '+(diffMin>=0?'badge-green':'badge-red')+'">'+(diffMin>=0?'+':'')+toHHMM(diffMin)+'</span>';
     html += '</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:.25rem;margin-bottom:.75rem">';
 
@@ -2006,7 +2129,7 @@ function renderPaieData(pointages, weekDates) {
 }
 
 
-// ═══════════ SIGNATURE PAD ═══════════
+// =========== SIGNATURE PAD ===========
 var sigCanvas, sigCtx, sigDrawing = false, sigHasMark = false;
 
 function initSignaturePad() {
@@ -2058,7 +2181,7 @@ function checkVendredi() {
        window._semaineSignature.semaine === semaine &&
        window._semaineSignature.annee === annee &&
        window._semaineSignature.technicien === window.currentUser) {
-      block.innerHTML = '<div class="card" style="background:rgba(46,125,50,.1);border:1.5px solid var(--primary)"><div style="text-align:center;padding:1rem"><div style="font-size:1.5rem">✅</div><div style="font-weight:600;color:var(--primary);margin-top:.5rem">Semaine signee</div><img src="'+window._semaineSignature.signature+'" style="max-width:150px;margin-top:.75rem;border-radius:6px"></div></div>';
+      block.innerHTML = '<div class="card" style="background:rgba(46,125,50,.1);border:1.5px solid var(--primary)"><div style="text-align:center;padding:1rem"><div style="font-size:1.5rem">OK</div><div style="font-weight:600;color:var(--primary);margin-top:.5rem">Semaine signee</div><img src="'+window._semaineSignature.signature+'" style="max-width:150px;margin-top:.75rem;border-radius:6px"></div></div>';
     } else {
       block.style.display = 'block';
       setTimeout(initSignaturePad, 100);
@@ -2088,6 +2211,74 @@ window.saveSignature = function() {
 
   window.doSaveSignature(data);
 };
+
+
+// =========== PHOTOS OBLIGATOIRES NETTOYAGE ===========
+var mandatoryPhotos = { malaxeur: null, trappe: null };
+
+window.addMandatoryPhoto = function addMandatoryPhoto(type, input) {
+  var file = input.files[0];
+  if(!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var img = new Image();
+    img.onload = function() {
+      var canvas = document.createElement('canvas'), MAX = 800;
+      var w = img.width, h = img.height;
+      if(w > MAX){ h = h*MAX/w; w = MAX; }
+      if(h > MAX){ w = w*MAX/h; h = MAX; }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      var compressed = canvas.toDataURL('image/jpeg', 0.75);
+      mandatoryPhotos[type] = compressed;
+
+      // Update preview
+      var preview = document.getElementById('photo-' + type + '-preview');
+      if(preview) {
+        preview.innerHTML = '';
+        var wrapDiv = document.createElement('div');
+        wrapDiv.style.cssText = 'position:relative;display:inline-block;width:100%';
+        var imgEl = document.createElement('img');
+        imgEl.src = compressed;
+        imgEl.style.cssText = 'width:100%;border-radius:8px;max-height:150px;object-fit:cover';
+        var delBtn = document.createElement('button');
+        delBtn.textContent = 'X';
+        delBtn.style.cssText = 'position:absolute;top:4px;right:4px;background:rgba(232,93,74,.9);color:white;border:none;width:22px;height:22px;border-radius:50%;font-size:11px;cursor:pointer';
+        (function(t){ delBtn.onclick = function(){ window.removeMandatoryPhoto(t); }; })(type);
+        wrapDiv.appendChild(imgEl);
+        wrapDiv.appendChild(delBtn);
+        preview.appendChild(wrapDiv);
+      }
+
+            // Update check indicator
+      var checkEl = document.getElementById('photo-' + type + '-check');
+      var badgeEl = document.getElementById('photo-' + type + '-badge');
+      var zoneEl = document.getElementById('photo-' + type + '-zone');
+      if(checkEl) checkEl.textContent = 'OK';
+      if(badgeEl) { badgeEl.textContent = 'OK'; badgeEl.className = 'badge badge-green'; badgeEl.style.fontSize = '.7rem'; }
+      if(zoneEl) { zoneEl.style.borderColor = 'var(--green)'; zoneEl.style.background = 'rgba(62,207,142,.05)'; }
+
+      updateTechDashboard();
+      window.showNotif('Photo ' + type + ' ajoutee !');
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+  input.value = '';
+}
+
+window.removeMandatoryPhoto = function removeMandatoryPhoto(type) {
+  mandatoryPhotos[type] = null;
+  var preview = document.getElementById('photo-' + type + '-preview');
+  if(preview) preview.innerHTML = '';
+  var checkEl = document.getElementById('photo-' + type + '-check');
+  var badgeEl = document.getElementById('photo-' + type + '-badge');
+  var zoneEl = document.getElementById('photo-' + type + '-zone');
+  if(checkEl) checkEl.textContent = '';
+  if(badgeEl) { badgeEl.textContent = 'Requise'; badgeEl.className = 'badge badge-red'; }
+  if(zoneEl) { zoneEl.style.borderColor = ''; zoneEl.style.background = ''; }
+  updateTechDashboard();
+}
 
 // Init time inputs listeners
 document.addEventListener('DOMContentLoaded', function() {
@@ -2133,7 +2324,7 @@ function checkHeuresRappel() {
       var div = document.createElement('div');
       div.id = 'heures-rappel-banner';
       div.style.cssText = 'background:rgba(232,93,74,.15);border:1.5px solid var(--red);border-radius:12px;padding:1rem 1.25rem;margin-bottom:1rem;display:flex;align-items:center;gap:.75rem;cursor:pointer';
-      div.innerHTML = '<span style="font-size:1.5rem">⏰</span><div style="flex:1"><div style="font-weight:600;font-size:.9rem;color:var(--red)">Heures non enregistrees</div><div style="font-size:.78rem;color:var(--text-dim)">Pense a pointer ta journee</div></div><span style="color:var(--red);font-size:1.2rem">&rarr;</span>';
+      div.innerHTML = '<span style="font-size:1.5rem"></span><div style="flex:1"><div style="font-weight:600;font-size:.9rem;color:var(--red)">Heures non enregistrees</div><div style="font-size:.78rem;color:var(--text-dim)">Pense a pointer ta journee</div></div><span style="color:var(--red);font-size:1.2rem">&rarr;</span>';
       div.onclick = function() {
         // Navigate to heures tab
         var heuresNav = document.querySelector('#screen-tech .nav-item:nth-child(4)');
